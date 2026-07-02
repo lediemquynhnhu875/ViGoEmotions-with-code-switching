@@ -1,0 +1,11 @@
+datasets
+transformers
+accelerate
+evaluate
+scikit-learn
+pandas
+numpy
+torch
+openpyxl
+pyarrow
+sentencepiece
