@@ -1,0 +1,156 @@
+split,text,labels,cs_group,english_tokens,teencode_tokens,emoji_count
+train,môi thâm tự ti ác luôn 🙃,"[21, 19]",emoji_only,,,1
+train,tự là là người mang dòng máu Việt Nam🥰,"[3, 7]",emoji_only,,,1
+train,vừa sếp vừa đồng nghiệp tốt thì đi làm như là đi chơi 💃 bonus 6h chưa hẳn đã muốn về,"[0, 2, 1]",emoji_only,,,1
+train,10đ thế mới là người Việt nam 🥰🥰🥰,"[3, 7]",emoji_only,,,1
+train,😑 sao cái kết gì mà buồn vậy,"[20, 21]",emoji_only,,,1
+train,Em thật sự biết ơn anh rất rất nhiều. Một người thầy tuyệt vời ❤❤❤,"[9, 8]",emoji_only,,,1
+train,@Kỹ thuật và đời sống đoán vội chắc 18 🥰,[0],emoji_only,,,1
+train,"Em thích tất cả các chủ đề mà anh chia sẻ từ kinh tế, tài chính cho đến sức khỏe đời sống và tư duy góc nhìn. Chúc anh có nhiều sức khỏe, niềm vui và hạnh phúc trong cuộc sống ạ❤❤❤.","[11, 6]",emoji_only,,,1
+train,miền tây tôi đấy 🥰,"[3, 7]",emoji_only,,,1
+train,Nguyễn Hoàn ok vào tù bú fame luôn a 🤣🤣🤣,[0],emoji_only,,,1
+train,Tôi thấy tự hào😁,[7],emoji_only,,,1
+train,Hối hận vì đã nhầm ck 😭,[18],emoji_only,,,1
+val,ngu thì chết . chẳng biết nó nghĩ sao mà lao vô cướp ngân hàng ... có thằng nào thoát bao giờ đâu . không biết nó có hiểu không 😅😅😅,"[24, 23]",emoji_only,,,1
+train,Tầm này có gia dình thôi. 😂😂😂,[0],emoji_only,,,1
+val,t phải tìm bạn trai là nhiếp ảnh gia mới được 😆,"[0, 4]",emoji_only,,,1
+train,Tôi yêu Việt Nam của tôi 🇻🇳❤️😍💋,"[3, 4, 7]",emoji_only,,,2
+train,đứa nào bị táo bón thâm niên cứ ra cầu này mà nhảy đảm bảo hiệu quả ngay lần đầu trải nghiệm 🤣🤣🤣,"[0, 1]",emoji_only,,,1
+train,"đây là tao khi bảo "" tao biết đường mà , tin tao ."" 🙂","[0, 7, 5]",emoji_only,,,1
+train,"xấu, mặt nhiều mụn, da đen ,lùn 😢☺️",[21],emoji_only,,,1
+train,"Nói không phải khoe, : Tôi tự hào là người VIỆT NAM,❤❤🇻🇳🇻🇳🇻🇳🇻🇳","[7, 3]",emoji_only,,,1
+val,cha mẹ tao còn cãi lộn nhau vì không biết ngày sinh tháng sinh của tao là dương hay âm 😢😢,"[21, 20]",emoji_only,,,1
+train,thế ông bác sĩ đó bây giờ còn sống không 🙂,[14],emoji_only,,,1
+train,Ôi chùa dễ thương ghê 🤣🤣,[0],emoji_only,,,1
+train,♥️♥️♥️,[3],emoji_only,,,3
+train,chạy ios cho máu 😂,"[1, 2, 0]",emoji_only,,,1
+train,sai lầm khi lấy vợ hiện tại 😌,"[20, 18]",emoji_only,,,1
+train,Same😳,[19],emoji_only,,,1
+val,Chúng tôi cần bik mặt người hùng 😆😍,"[2, 3, 4]",emoji_only,,,1
+train,"Nguyễn Hải Linh nói rõ hơn là ảnh vừa giỏi, vừa giàu, vừa dũng cảm nữa đó a, nhà có mấy căn cho thuê nè😊","[2, 8]",emoji_only,,,1
+train,gần 1h đêm là con trai mà xem xong nói chuyện mắt vẫn rỡi 😔😔,[21],emoji_only,,,1
+train,per bảo này mày không được đi chơi đêm nhé,"[25, 26]",english_mixed,per,,0
+train,per dume vỉa hè quá rộng . con này không đi oto bao giờ là chắc ?,"[25, 24]",english_mixed,per,quá,0
+train,xem video của bạn thì mình xác nhận việc học quan trọng thế nào,"[12, 11]",english_mixed,video,mình,0
+train,per tao tán sấp mặt,[24],english_mixed,per,,0
+val,per mốt đừg có thiết kế hay xây mấy cái kiểu như dị nhé hem ><,"[12, 17]",english_mixed,per,hem,0
+test,per mày cũng có tình yêu từ nơi đây phải không ?,"[3, 14]",english_mixed,per,cũng,0
+val,"per thế là 2 anh này chưa gặp tao rồi , =)) 7km nhé","[0, 1]",english_mixed,per,,0
+train,"per mày ơi trò này lợi hại nè áp dụng ngay :"")))","[0, 1]",english_mixed,per,,0
+test,vận may s cứ xua đuổi mình hoài chứ có bao giờ tự tìm đến đâu ? đen thôi chứ đỏ quên điii nha . đời thường giết chết kẻ mộng mer như mình .,[25],english_mixed,mer,"mình, chứ, chứ, mình",0
+train,"Rất ủng hộ chủ đề này. Hiện nay team khát nước ra sức nói láo về lịch sử, kích động chia rẻ. Cần có tiếng nói đủ trọng lượng giàu tính giáo dục để ngăn chặn fake lịch sử.","[11, 24, 26]",english_mixed,"team, fake",,0
+train,Yêu chị😍. Video của chị luôn bổ ích 👍🏻,"[3, 11]",english_mixed,Video,,2
+train,"per cái thứ yêu nghiệt này cứ thấy tao như thấy crush , cứ gặp tao là đuổi :)","[0, 25, 23]",english_mixed,per,crush,0
+train,"Thật ra thắng thua không phải vấn đề.
+Cách thằng thua mới là cái để nói đến.
+Team làm được như vậy là rất tốt rồi.
+Good job","[7, 11]",english_mixed,"Team, Good, job",,0
+train,"Hihi cuối năm nghe lại video này. Năm nay em cũng 30 tuổi, thấy đồng cảm nhiều ghê á anh. Chúc mừng năm mới mọi người","[0, 2, 9]",english_mixed,video,cũng,0
+train,per sự tích con chim họa tao với mấy thắc mắc hồi trước nè,[12],english_mixed,per,với,0
+val,Hân Ngọc Bảo Nguyễn sao bằng thái tử Hunter con nhà Biden !,[26],english_mixed,Hunter,,0
+train,per hôm nay c cũng bị giống thằng này này,[27],english_mixed,per,cũng,0
+train,"Một chiếc video rất ý nghĩa  ❤️❤️❤️. Dù giờ em mới xem nhưng thật sự nó cần với em lúc này. Giống như mặt trời tỏa nắng sau những ngày âm u, ủ dột.","[3, 9, 10, 2, 12]",english_mixed,video,với,3
+train,Đông Đông giờ mới lên fb thấy breaking t hoảng luôn bà ơi.,"[13, 16, 17]",english_mixed,breaking,,0
+train,"Hôm nay video của giang thấy mắt giang cứ như nhìn đi chỗ khác ý, ko có cảm giác giao lưu với mọi người như các video khác. Nhưng cũng cảm ơn giang đã ra video này","[9, 12]",english_mixed,"video, video, video","ko, với, cũng",0
+train,per chắc là mày đi hốt này,[27],english_mixed,per,,0
+train,đã xấu đủ cái còn bị bodysaming :((,"[19, 21, 25]",english_mixed,bodysaming,,0
+train,per xem câu chuyện hư cấu này giết thời gian này 👏,[0],english_mixed,per,,1
+train,"Thật sự biết ơn video của anh, chúc anh ngày mới an lành!","[9, 6]",english_mixed,video,,0
+val,Bị zị vừa lắm ...cứ bị bắt là kể hoàn cảnh...coi clip a 7 chỗ tông vô mà khoái...tông trúng k trượt phát nào xem mà hả hê thấy ghê... nhìn mấy thằng bắt chó mà thấy ứa gan,"[24, 25]",english_mixed,clip,k,0
+train,"E mong a ra một vid về chuyển biến tâm lý ở từng độ tuổi,<br>E tìm kiếm nhưng khá ít video nói về điều đó<br>E năm nay 23 tuổi và có thể nhận diện rõ càng biến chuyển về tâm lý hoặc xu hướng quan tâm vào vấn đề gì ,hoặc thản nhiên trước những thư trước kia cho là vô lý,ko khóc lóc như người thân mất,hoặc cảm thất lo lắng khi ko biết cuộc sống hôn nhân sẽ diễn ra như nào, nuôi dạy 1 đứa trẻ ra làm sao","[4, 14]",english_mixed,video,"ko, ko",0
+train,"@nhatly508 Haha, bậy quá bác ơi. Có người yêu hoặc vợ là được rồi nè","[0, 11]",english_mixed,nhatly,quá,0
+test,chuẩn rồi per dù mệt mỏi nhưng vẫn vui :))),"[0, 2]",english_mixed,per,,0
+train,Bắc Bún cho em xin video với,"[14, 4]",english_mixed,video,với,0
+train,"@nangoc84 Xây kênh online và chia sẻ giúp bạn ngồi một chỗ giao tiếp và tiếp cận hàng trăm ngàn người mà không cần phải gặp gỡ 1-1.
+
+Giúp bạn thoát khỏi nỗi sợ đám đông, thoát khỏi giới hạn của tính cách hướng nội","[5, 6]",english_mixed,online,,0
+train,@Hien2021 Mỗi giai đoạn cuộc đời có nỗi sợ riêng của nó hết,"[12, 16]",other_noise,,,0
+train,@nangoc84 Lối thoát là hành động liên tục kiên trì để tiến đến mục tiêu mỗi ngà,[5],other_noise,,,0
+train,"@duylongle đó là một cách nghĩ rất lý trí đó, hy vọng khi rơi vào hoàn cảnh như vậy vẫn có  thể sáng suốt lựa chọn","[5, 11]",other_noise,,,0
+train,@khongdongx53939 Hi vọng bạn làm được nhiều việc thiện nguyện,"[5, 6]",other_noise,,,0
+train,@99% @halinh yessirrrr chính là nó,"[11, 1]",other_noise,,,0
+train,@Nesaragesaraknm Ôi thật tuyệt vời nếu như được sử dụng nó,"[4, 5, 1]",other_noise,,,0
+train,@myname22122000 Đúng vậy ạ,[11],other_noise,,,0
+train,@bachung_it Bình yên hẳn anh ạ,"[10, 6]",other_noise,,,0
+train,@vk taeju xin lũi bà áo tui hơi giãn,"[18, 19]",other_noise,,,0
+train,"@Hien2021 Không có nỗi sợ, chúng ta khó có thể trưởng thành phải không bạn?","[12, 5]",other_noise,,,0
+test,@TvNhinhi Cuộc sống không luôn thú vị nhưng ta tự chọn cách sống thế nào.,"[5, 12]",other_noise,,,0
+train,@_1th11?!_,[15],other_noise,,,0
+train,@ThangBanhBaooo Trải qua tuổi trẻ mới đến tuổi già mà,[12],other_noise,,,0
+train,@quynh.029 @be_pi0503 nàoooooo,[1],other_noise,,,0
+train,@ThuanNguyen5672 Hãy mạnh mẽ bước tiếp dù bão giông tới,"[5, 6]",other_noise,,,0
+train,sợ giao @típ,"[17, 16]",other_noise,,,0
+test,"Hiện giờ là 12h30&#39; sáng. Em thật sự muốn đi ngủ, nhưng hễ nhắm mắt là nghĩ tới những điều tiêu cực..","[4, 17]",other_noise,,,0
+train,"@MinhHai_MO OK em, làm podcast là tuyệt vời","[11, 1]",other_noise,,,0
+val,@bùnn nói gì?,"[14, 15]",other_noise,,,0
+train,@TvNhinhi Chúc em một ngày có nhiều năng lượng,[6],other_noise,,,0
+val,@TvNhinhi Ngày hôm nay được biết ơn vì đã vượt qua những khó khăn.,[9],other_noise,,,0
+train,@huynhtuan8200 Chắn chắn sẽ như vậy bác nhé,"[11, 5]",other_noise,,,0
+train,@TvNhinhi Cái gì trải qua mất đi r ms thấy nó quý giá hầy,"[12, 1]",other_noise,,,0
+train,"@Gocnhocuabo ""Những giai điệu êm dịu này mang lại cho ngày mới cảm giác thư thái và bình yên.""","[2, 5, 10]",other_noise,,,0
+test,@Nganem956 sao đấy em,[14],other_noise,,,0
+train,"@Lengocthang_123 Vâng b, lễ hội này sẽ giúp thu hút đươc khách du lịch phát triển kinh tế b nhỉ","[5, 11]",other_noise,,,0
+train,@thanhda00207820 Bình yên bác ạ,"[6, 10]",other_noise,,,0
+train,@khongdongx53939 Thần phù hộ cho chị và anh!,[6],other_noise,,,0
+train,@khongdongx53939 Có dịp là xách balo mà đi thôi b nhỉ,[1],other_noise,,,0
+test,@Gocnhocuabo Sáng nay tôi chỉ muốn thưởng thức một tách cà phê thật thư giãn và thả lỏng tâm hồn. Cảm ơn!,"[2, 9, 10]",other_noise,,,0
+train,con mụ đen sai còn già mồm ...,"[26, 23]",pure_vi,,,0
+test,đấy thấy chưa con người ta khổ như thế,"[20, 21]",pure_vi,,,0
+train,tôi rất tự hào vì mk là người Việt Nam 'TÔI YÊU VIỆT NAM'🇻🇳🇻🇳🇻🇳,"[7, 3]",pure_vi,,,0
+train,"Linh Phan ai đụng đến danh lam thắng cảnh PY tui ra đó nằm ăn vạ luôn,bạn khỏi phải lo.","[24, 25]",pure_vi,,,0
+train,Thơ củ chuối,"[26, 23]",pure_vi,,,0
+test,biết nấu cơm bếp củi từ lớp 2_3 gì đó,[7],pure_vi,,,0
+train,"chỉ có bọn nông dân mới nghĩ ra mấy trò này , phải con cháu nhà tao thì tao đến từng nhà 1 bắt từng thằng ăn cứt","[24, 23]",pure_vi,,,0
+train,Tự hào,[7],pure_vi,,,0
+val,Nang Mai í nói ít người cao thường thường 1m75.chưa thấy ai 1m8,[27],pure_vi,,,0
+train,"Vậy mà vẫn đứng xem tụi nhỏ biểu diễn rồi tung hô, còn ngăn cản công an nữa, đến lạy, ngu xuẩn, thật ngu xuẩn",[24],pure_vi,,,0
+train,cười sái mẹ quai hàm,[0],pure_vi,,,0
+train,Mong thầy làm nhiều hợ về sức khỏe tinh thần ạ.em cảm ơn thầy,"[9, 4]",pure_vi,,,0
+train,"Le Thao Vi dùng pc mới được nha, có ghi bao nhiêu lượt chia sẻ á, nhấn vô",[1],pure_vi,,,0
+train,chỉ cần nhìn họ thì đã thấy tim đập mạnh rồi =))),"[1, 2]",pure_vi,,,0
+train,nhiều lúc em di từ từ chưa kịp đỗ đã có n ra bảo không được đỗ ở đây chán qúa,"[25, 21]",pure_vi,,,0
+val,viết tên anh trên cát cho sóng đập nát cái matlon anh :)),"[0, 2]",pure_vi,,,0
+val,Hân Hân voãi,[27],pure_vi,,,0
+val,coi như giải thích rồi nhé,[27],pure_vi,,,0
+train,Kiện bm nó đi,"[24, 20]",pure_vi,,,0
+train,xinloiduocchua=),"[0, 18]",pure_vi,,,0
+train,"phim giật gân , hấp dẫn đấy","[0, 1, 2]",pure_vi,,,0
+train,Loại con khốn nạn,"[23, 24]",pure_vi,,,0
+train,ừ công nhận == không có tiền mua,"[21, 25]",pure_vi,,,0
+train,phải tôi đỗ lên vỉa hè giáp cửa nhà bạn bán hàng luôn . vỉa hè rộng thế kia cơ mà .??????????,"[25, 26]",pure_vi,,,0
+train,Quỳnh Ann chắc chưaaa,[14],pure_vi,,,0
+train,nam nhân nhà người ta kbh làm tôi thất vọng,"[2, 8, 7]",pure_vi,,,0
+train,mẹ mắng lúc sáng sớm là xui cả ngày :(,[21],pure_vi,,,0
+train,trời ơi ai nuôi chó mà để nó tội thế kia . đéo có trách nhiệm,"[23, 24]",pure_vi,,,0
+val,"e ấy đang khóc , nhưng vì hàm răng không thể thụt vào nên mọi người nghĩ là em đang cười :))))","[0, 21]",pure_vi,,,0
+train,Tuyệt vời các Bsy..,"[2, 8]",pure_vi,,,0
+train,Tại chính bản thân mình quá tin tưởng vào tình cảm để giờ bị tổn thương và tổn thất tư tinh thần đến vật chất. Thôi cố lên,"[18, 22, 21]",teencode_slang,,"mình, quá",0
+train,"Mình cũng đã có lúc như em trai này...gọi là lụy tình, đau khổ, buồn bã còn nghĩ đến tự hại bản thân, kì thực, họ đã ko yêu họ éo quan tâm đâu...khuyên thật tình, thôi thì trải qua một lần cho biết, rồi đứng dậy em ơi, đàn ông cứ thành công đi, tự tin, mạnh mẽ lên, tự khắc nó có &quot;aura&quot;, khi đó người phụ nữ bên cạnh sẽ có đc cảm giác an toàn không thể rời xa, mà nếu có thì cũng kệ mẹ nó, thiếu gì gái","[18, 5]",teencode_slang,,"mình, cũng, ko, đc, cũng",0
+train,hic không phải tiền của mình nên có vẻ nhiều người xem nhẹ quá nhỉ . 580k to mà công sức các thứ các thứ của chủ thớt chứ có đi xin đâu ? :)),[25],teencode_slang,,"mình, quá, k, chứ",0
+train,Chúc mừng GĐ đã gặp đc những bs có tâm có tầm,"[8, 9, 2]",teencode_slang,,đc,0
+train,em tâm đắc nhất với ý cuối cùng của chị : bớt đổ lỗi và chịu trách nhiệm với chính mình! thật khó để nhận ra khi bao lâu nay em thường đổ lỗi cho những người xung quanh vô hình chung là mình bị tiêu cực với mọi thứ! cảm ơn chị rất nhiều !,"[9, 11]",teencode_slang,,"với, với, mình, mình, với",0
+train,V đến kỳ dâu thì phải lms,[14],teencode_slang,,v,0
+train,Tự hào khi mình được sinh ra ơi Việt Nam❤️🌻,"[7, 3]",teencode_slang,,mình,2
+train,Moi chuyen dk sắp đặt cả rồi ko việc gì phải hối hận cả 😊,"[5, 10]",teencode_slang,,"dk, ko",1
+train,Phim gì vậy mn,[14],teencode_slang,,mn,0
+train,con trai giờ mất giá v luôn hã mấy chế :))),[0],teencode_slang,,v,0
+train,Ko phải mà hôm nay t quên đáng răng 😔,"[18, 21]",teencode_slang,,ko,1
+train,"@VuTienHao8386 đúng rồi em ơi, không phải của mình cố chấp chỉ mình đau lòng thôi",[21],teencode_slang,,"mình, mình",0
+test,Mỹ Lan nếu là mình mình sẽ nhận lỗi của mình khi thấy trẻ con tới gần bàn mình mình ko ngăn nó lại.,[18],teencode_slang,,"mình, mình, mình, mình, mình, ko",0
+train,tự ti đến vc khog muốn soi gương 😔,[19],teencode_slang,,vc,1
+val,Νhan sắc ko có thì còn có còn tính cách của cta quyết định nx nhx hãy cố gắng hoàn thiện bản thân để trở nên tốt hơn nha ✊,"[5, 6]",teencode_slang,,ko,1
+train,chỗ tao cũng có cây tình yêu < 3,"[2, 3]",teencode_slang,,cũng,0
+val,Pls làm ơn…,[4],teencode_slang,,pls,0
+train,"Thực ra ai cũng có nhu cầu cả ý... nhưng mà nó phải đúng thời điểm, đủ lâu, đủ tin tưởng rồi hãng tính đến chuyện đó ý bà. Nên là cứ mạnh dạn đi date thôi, còn nhiều ae ở ngoài kia họ cũng tinh tế mà.",[5],teencode_slang,,"cũng, cũng",0
+train,nếu ai cũng có ý thức tốt đẹp thì đất nước này còn gì để nói . đâu có ai hoàn toàn hoàn hảo đâu bạn . dù là moi tần lớp,"[12, 21]",teencode_slang,,cũng,0
+test,thương anh bạn kia quá .,"[6, 21]",teencode_slang,,quá,0
+train,douma đứng trong nhà cũng không yên cái thân,"[17, 25]",teencode_slang,,cũng,0
+val,đã từng hoặc tự mình nghĩ vậy,[12],teencode_slang,,mình,0
+train,"Ai ai cg đã từng trải qua áp lực,khó khăn mới đi đến thành công tất cả đều phụ thuộc vào sức khỏe,ai chửi ai mắng ko qtr, qtr là phải giữ gìn sức khỏe ,đến khi nằm 1 chỗ rồi mới biết ai là người bên cạnh mh lúc này ❤️","[2, 5, 6, 9, 12]",teencode_slang,,"cg, ko",1
+train,"Tam Pham thì bạn muốn làm j làm.mình chỉ lên đây nói suy nghĩ của mình,và mình chưa hề nhắn tên ai hay tên bạn, nên mình cũng chả muốn nói j bạn, còn bạn muốn nghĩ sao là quyền của bạn👌","[25, 24]",teencode_slang,,"j, mình, mình, mình, mình, cũng, j",1
+train,"Nguyễn Thị Hồng Nhung ghê quá, k dám cho uống thật c ạ, 11 tuooit r mà bé gì đâu","[16, 17]",teencode_slang,,"quá, k",0
+train,cảnh này gặp cũng nhiều rồi . dọn thấy mẹ luôn mà vẫn không sạch được . tức ghê . ức chế lắm . 1 lần thì không sao mà cả chục lần như vậy,[25],teencode_slang,,cũng,0
+train,Tự tin hétttt vì mik bt mik đẹp:))) mặc dù da đen:)),"[0, 7]",teencode_slang,,"mik, bt, mik",0
+train,nuôi sao mà trông béo tốt thế kia :v chỉ bí quyết đi,"[0, 14, 13]",teencode_slang,,v,0
+train,Đức Nhân Apple nó dở chứ trốn trong hòm ai biết mà tìm.,"[0, 25]",teencode_slang,,chứ,0
+train,vì lợi nhuận con người ta có thể độc ác với nhau như vậy sao ???,"[23, 24]",teencode_slang,,với,0
