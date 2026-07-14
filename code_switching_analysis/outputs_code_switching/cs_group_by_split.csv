@@ -1,5 +1,5 @@
-split,emoji_only,english_mixed,other_noise,pure_vi,teencode_slang,All
-test,279,194,26,751,817,2067
-train,2148,1373,241,6313,6456,16531
-val,271,187,30,746,832,2066
-All,2698,1754,297,7810,8105,20664
+split,chinese_mixed,english_mixed,other_foreign,pure_vi,All
+test,0,211,0,1856,2067
+train,6,1485,5,15035,16531
+val,3,198,2,1863,2066
+All,9,1894,7,18754,20664
