@@ -81,16 +81,128 @@ def load_annotations(path: str, split: str):
 # Inference
 # ---------------------------------------------------------------------------
 
-def predict_proba(texts, model_path: str, max_length: int, batch_size: int,
-                  use_fast: bool = True) -> np.ndarray:
+HF_WEIGHT_NAMES = ("model.safetensors", "pytorch_model.bin",
+                   "model.safetensors.index.json", "pytorch_model.bin.index.json")
+STATE_DICT_EXTS = (".pt", ".pth", ".bin", ".ckpt", ".safetensors")
+
+
+def resolve_checkpoint(model_path: str):
+    """Tìm ra dạng checkpoint thực tế.
+
+    Trả về ('hf_dir', path)      -> thư mục save_pretrained hợp lệ
+           ('state_dict', path)  -> file .pt/.pth/.bin chứa state_dict
+
+    Kaggle Models hay bọc thêm vài lớp thư mục, và nhiều notebook train lưu bằng
+    torch.save(model.state_dict(), ...) thay vì save_pretrained().
+    """
+    p = Path(model_path)
+    if p.is_file():
+        return ("state_dict", p)
+    if not p.exists():
+        raise FileNotFoundError(f"Không tồn tại: {p}")
+
+    # thư mục HF hợp lệ?
+    def is_hf_dir(d: Path) -> bool:
+        return (d / "config.json").exists() and any((d / w).exists() for w in HF_WEIGHT_NAMES)
+
+    if is_hf_dir(p):
+        return ("hf_dir", p)
+
+    for d in sorted(x for x in p.rglob("*") if x.is_dir()):
+        if is_hf_dir(d):
+            print(f"    [i] tìm thấy checkpoint HF ở thư mục con: {d}")
+            return ("hf_dir", d)
+
+    # file state_dict rời
+    cands = [f for f in p.rglob("*") if f.is_file() and f.suffix.lower() in STATE_DICT_EXTS]
+    if cands:
+        cands.sort(key=lambda f: f.stat().st_size, reverse=True)
+        print(f"    [i] không thấy thư mục save_pretrained, dùng state_dict: {cands[0]}")
+        return ("state_dict", cands[0])
+
+    listing = "\n      ".join(str(f) for f in list(p.rglob("*"))[:30])
+    raise FileNotFoundError(
+        f"Không tìm thấy trọng số trong {p}.\nNội dung:\n      {listing}\n"
+        "Nếu checkpoint còn nén .zip thì giải nén trước, hoặc truyền thẳng đường dẫn file .pt."
+    )
+
+
+def _clean_state_dict(sd):
+    """Bóc các lớp bọc thường gặp: DataParallel, Lightning, dict lồng nhau."""
+    for key in ("state_dict", "model_state_dict", "model"):
+        if isinstance(sd, dict) and key in sd and isinstance(sd[key], dict):
+            sd = sd[key]
+            break
+    if not isinstance(sd, dict):
+        raise ValueError("File checkpoint không chứa state_dict dạng dict.")
+    out = {}
+    for k, v in sd.items():
+        for prefix in ("module.", "model.", "_orig_mod."):
+            if k.startswith(prefix):
+                k = k[len(prefix):]
+        out[k] = v
+    return out
+
+
+def load_model_and_tokenizer(model_path: str, base_model: str = None,
+                             tokenizer_path: str = None, use_fast: bool = True):
     import torch
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
+
+    kind, path = resolve_checkpoint(model_path)
+
+    if kind == "hf_dir":
+        tok_src = tokenizer_path or (str(path) if (path / "tokenizer_config.json").exists()
+                                     else base_model)
+        if tok_src is None:
+            raise ValueError("Checkpoint không có tokenizer. Truyền --tokenizer hoặc --base-model.")
+        tok = AutoTokenizer.from_pretrained(tok_src, use_fast=use_fast)
+        model = AutoModelForSequenceClassification.from_pretrained(
+            str(path), num_labels=NUM_LABELS, problem_type="multi_label_classification"
+        )
+        return model, tok
+
+    # state_dict rời -> cần biết kiến trúc gốc
+    if not base_model:
+        raise ValueError(
+            f"Checkpoint {path} là state_dict rời. Cần truyền --base-model, ví dụ:\n"
+            "  --base-model FPTAI/vibert-base-cased\n"
+            "  --base-model xlm-roberta-base | vinai/phobert-base | uitnlp/visobert\n"
+            "  --base-model bert-base-multilingual-cased | uitnlp/CafeBERT"
+        )
+    tok = AutoTokenizer.from_pretrained(tokenizer_path or base_model, use_fast=use_fast)
+    config = AutoConfig.from_pretrained(base_model, num_labels=NUM_LABELS,
+                                        problem_type="multi_label_classification")
+    model = AutoModelForSequenceClassification.from_config(config)
+
+    if path.suffix.lower() == ".safetensors":
+        from safetensors.torch import load_file
+        sd = load_file(str(path))
+    else:
+        sd = torch.load(str(path), map_location="cpu", weights_only=False)
+    sd = _clean_state_dict(sd)
+
+    missing, unexpected = model.load_state_dict(sd, strict=False)
+    print(f"    [i] load_state_dict: missing={len(missing)} unexpected={len(unexpected)}")
+    if missing:
+        print(f"        missing (5 đầu): {list(missing)[:5]}")
+    if unexpected:
+        print(f"        unexpected (5 đầu): {list(unexpected)[:5]}")
+    if len(missing) > 0.5 * len(list(model.state_dict())):
+        raise RuntimeError(
+            "Quá nhiều trọng số không khớp -> --base-model nhiều khả năng sai kiến trúc."
+        )
+    return model, tok
+
+
+def predict_proba(texts, model_path: str, max_length: int, batch_size: int,
+                  use_fast: bool = True, base_model: str = None,
+                  tokenizer_path: str = None) -> np.ndarray:
+    import torch
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    tok = AutoTokenizer.from_pretrained(model_path, use_fast=use_fast)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_path, num_labels=NUM_LABELS, problem_type="multi_label_classification"
-    ).to(device).eval()
+    model, tok = load_model_and_tokenizer(model_path, base_model, tokenizer_path, use_fast)
+    model = model.to(device).eval()
 
     out = []
     with torch.no_grad():
@@ -184,7 +296,13 @@ def main() -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--annotations", required=True,
                     help="cs_subsets/annotations/vigo_cs_annotations.csv")
-    ap.add_argument("--model", required=True, help="đường dẫn checkpoint HF")
+    ap.add_argument("--model", required=True,
+                    help="Thư mục save_pretrained, thư mục Kaggle Model, hoặc file .pt state_dict")
+    ap.add_argument("--base-model", default=None,
+                    help="Tên/đường dẫn model gốc trên HF. BẮT BUỘC nếu --model là state_dict rời, "
+                         "vd: vinai/phobert-base, xlm-roberta-base, FPTAI/vibert-base-cased")
+    ap.add_argument("--tokenizer", default=None,
+                    help="Nguồn tokenizer nếu checkpoint không kèm tokenizer")
     ap.add_argument("--model-tag", default="model")
     ap.add_argument("--split", default="test")
     ap.add_argument("--out-dir", default="./subset_eval")
@@ -210,7 +328,8 @@ def main() -> None:
         print("[*] Tune threshold trên val ...")
         val_df, val_y = load_annotations(args.annotations, "val")
         val_prob = predict_proba(val_df["text"].astype(str).tolist(), args.model,
-                                 args.max_length, args.batch_size, not args.slow_tokenizer)
+                                 args.max_length, args.batch_size, not args.slow_tokenizer,
+                                 args.base_model, args.tokenizer)
         threshold, best_val = tune_threshold(val_y, val_prob)
         print(f"    threshold = {threshold:.2f} (macro F1 val = {best_val:.4f})")
 
@@ -221,7 +340,8 @@ def main() -> None:
         y_prob = np.load(args.probs_npy)
     else:
         y_prob = predict_proba(df["text"].astype(str).tolist(), args.model,
-                               args.max_length, args.batch_size, not args.slow_tokenizer)
+                               args.max_length, args.batch_size, not args.slow_tokenizer,
+                               args.base_model, args.tokenizer)
         np.save(out_dir / f"probs_{args.split}.npy", y_prob)
     y_pred = (y_prob >= threshold).astype(int)
 
