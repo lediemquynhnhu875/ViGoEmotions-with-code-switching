@@ -1,0 +1,12 @@
+pandas>=1.5
+numpy>=1.23
+scikit-learn>=1.2
+
+# tuỳ chọn nhưng nên cài
+wordfreq>=3.0          # mở rộng lexicon tiếng Anh (top 30k từ) cho detector
+datasets>=2.14         # đọc ViGoEmotions từ Hugging Face + --save-hf
+openpyxl>=3.1          # đọc .xlsx
+
+# chỉ cần cho eval_on_subsets.py
+torch>=2.0
+transformers>=4.35
