@@ -43,7 +43,10 @@ NUM_LABELS = 28
 HF_WEIGHT_NAMES = ("model.safetensors", "pytorch_model.bin",
                    "model.safetensors.index.json", "pytorch_model.bin.index.json")
 STATE_DICT_EXTS = (".pt", ".pth", ".bin", ".ckpt", ".safetensors")
-EMB_MARKERS = ("embeddings.word_embeddings.weight", "embed_tokens.weight",
+EMB_MARKERS = ("embeddings.word_embeddings.weight",     # BERT / RoBERTa / XLM-R
+               "encoder.embed_tokens.weight",           # mBART / T5 (BARTpho, ViT5)
+               "shared.weight",                         # mBART / T5 embedding dùng chung
+               "embed_tokens.weight",
                "word_embedding.weight")
 
 
@@ -157,14 +160,23 @@ def detect_structure(sd, num_labels=NUM_LABELS):
 
 
 class GenericClassifier(nn.Module):
-    """encoder + dropout + 1 Linear, tên thuộc tính khớp checkpoint.
+    """backbone + dropout + 1 Linear, tên thuộc tính khớp checkpoint.
 
     Tương ứng mô tả trong bài báo: một lớp Dropout (p = 0.2) và một lớp fully
     connected với số nút đầu ra bằng số nhãn.
+
+    Hỗ trợ cả kiến trúc encoder-decoder (BARTpho/mBART, ViT5/T5):
+    backbone vẫn được dựng đầy đủ để state_dict khớp 100%, nhưng khi forward
+    chỉ chạy phần encoder — T5Model sẽ báo lỗi nếu thiếu decoder_input_ids, còn
+    MBartModel thì âm thầm dịch phải input_ids để tạo decoder input, cả hai đều
+    không phải điều ta muốn ở bài phân loại.
+
+    `pooling`: 'cls' lấy vị trí đầu, 'mean' lấy trung bình có mask.
+    Nếu `check_vs_paper()` lệch nhiều với BARTpho/ViT5, thử đổi sang 'mean'.
     """
 
     def __init__(self, base_model, enc_attr, head_attr, num_labels=NUM_LABELS,
-                 dropout=0.2, use_pooler=True):
+                 dropout=0.2, use_pooler=True, pooling="cls"):
         super().__init__()
         cfg = AutoConfig.from_pretrained(base_model)
         setattr(self, enc_attr, AutoModel.from_config(cfg))
@@ -173,13 +185,34 @@ class GenericClassifier(nn.Module):
         setattr(self, head_attr, nn.Linear(hidden, num_labels))
         self._enc_attr, self._head_attr = enc_attr, head_attr
         self.use_pooler = use_pooler
+        self.pooling = pooling
+        self.is_enc_dec = bool(getattr(cfg, "is_encoder_decoder", False))
 
     def forward(self, **kw):
         kw.pop("labels", None)
-        out = getattr(self, self._enc_attr)(**kw)
-        pooled = getattr(out, "pooler_output", None)
+        backbone = getattr(self, self._enc_attr)
+
+        if self.is_enc_dec:
+            enc = getattr(backbone, "encoder", None)
+            if enc is None:
+                raise RuntimeError("Backbone encoder-decoder nhưng không có .encoder")
+            out = enc(**kw)
+        else:
+            out = backbone(**kw)
+
+        pooled = None if self.is_enc_dec else getattr(out, "pooler_output", None)
         if pooled is None or not self.use_pooler:
-            pooled = out.last_hidden_state[:, 0]
+            h = out.last_hidden_state
+            if self.pooling == "mean":
+                mask = kw.get("attention_mask")
+                if mask is None:
+                    pooled = h.mean(dim=1)
+                else:
+                    mask = mask.unsqueeze(-1).to(h.dtype)
+                    pooled = (h * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
+            else:
+                pooled = h[:, 0]
+
         return SequenceClassifierOutput(
             logits=getattr(self, self._head_attr)(self.dropout(pooled)))
 
@@ -188,7 +221,8 @@ class GenericClassifier(nn.Module):
 # API chính
 # ---------------------------------------------------------------------------
 def load_model_and_tokenizer(model_path, base_model=None, tokenizer_path=None,
-                             use_fast=True, num_labels=NUM_LABELS, strict=True):
+                             use_fast=True, num_labels=NUM_LABELS, strict=True,
+                             pooling="cls"):
     kind, path = resolve_checkpoint(model_path)
 
     if kind == "hf_dir":
@@ -219,7 +253,11 @@ def load_model_and_tokenizer(model_path, base_model=None, tokenizer_path=None,
 
     sd = clean_state_dict(obj)
     enc_attr, head_attr, two_layer = detect_structure(sd, num_labels)
-    print(f"    [i] cấu trúc: encoder='{enc_attr}' head='{head_attr}' "
+    _cfg = AutoConfig.from_pretrained(base_model)
+    if getattr(_cfg, "is_encoder_decoder", False):
+        print(f"    [i] kiến trúc encoder-decoder ({_cfg.model_type}) "
+              f"-> chỉ chạy phần encoder, pooling='{pooling}'")
+    print(f"    [i] cấu trúc: backbone='{enc_attr}' head='{head_attr}' "
           f"{'(2 lớp)' if two_layer else '(1 lớp)'}")
 
     tok = AutoTokenizer.from_pretrained(tokenizer_path or base_model, use_fast=use_fast)
@@ -238,7 +276,8 @@ def load_model_and_tokenizer(model_path, base_model=None, tokenizer_path=None,
         sd = {(f"{tgt}." + k[len(enc_attr) + 1:] if k.startswith(enc_attr + ".") else k): v
               for k, v in sd.items()}
     else:
-        model = GenericClassifier(base_model, enc_attr, head_attr, num_labels)
+        model = GenericClassifier(base_model, enc_attr, head_attr, num_labels,
+                                  pooling=pooling)
 
     missing, unexpected = model.load_state_dict(sd, strict=False)
     print(f"    [i] load_state_dict: missing={len(missing)} unexpected={len(unexpected)}")
