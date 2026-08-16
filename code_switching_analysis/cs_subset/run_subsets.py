@@ -36,20 +36,137 @@ OUT_DIR = Path("/kaggle/working/cs_multi")
 ANNOT = OUT_DIR / "vigo_cs_multi.csv"
 EVAL_DIR = "/kaggle/working/subset_eval_multi"
 
+S3_ROOT = "/kaggle/input/datasets/izmildqnh/vigoemotions-pretrained-s3"
+
 CHECKPOINTS = [
-    dict(scenario="s3", model_tag="cafebert-s3", base_model="uitnlp/CafeBERT",
-         model_path="/kaggle/input/.../cafe_s3_best"),
-    dict(scenario="s3", model_tag="mbert-s3", base_model="google-bert/bert-base-multilingual-cased",
-         model_path="/kaggle/input/.../mbert_s3_best"),
-    dict(scenario="s3", model_tag="phobert-s3", base_model="vinai/phobert-base-v2",
-         model_path="/kaggle/input/.../pho_s3_best"),
-    dict(scenario="s3", model_tag="vibert-s3", base_model="FPTAI/vibert-base-cased",
-         model_path="/kaggle/input/.../vibert_s3_best"),
-    dict(scenario="s3", model_tag="visobert-s3", base_model="uitnlp/visobert",
-         model_path="/kaggle/input/.../visobert_s3_best"),
-    dict(scenario="s3", model_tag="xlmr-s3", base_model="FacebookAI/xlm-roberta-base",
-         model_path="/kaggle/input/.../xlm-r_s3_best"),
+    dict(scenario="s3", model_tag="cafebert-s3",
+         base_model="uitnlp/CafeBERT",
+         model_path=f"{S3_ROOT}/cafe_s3_best/cafe_s3_best"),
+    dict(scenario="s3", model_tag="mbert-s3",
+         base_model="google-bert/bert-base-multilingual-cased",
+         model_path=f"{S3_ROOT}/mbert_s3_best/mbert_s3_best"),
+    dict(scenario="s3", model_tag="phobert-s3",
+         base_model="vinai/phobert-base-v2",
+         model_path=f"{S3_ROOT}/pho_s3_best/pho_s3_best"),
+    dict(scenario="s3", model_tag="vibert-s3",
+         base_model="FPTAI/vibert-base-cased",
+         model_path=f"{S3_ROOT}/vibert_s3_best/vibert_s3_best"),
+    dict(scenario="s3", model_tag="visobert-s3",
+         base_model="uitnlp/visobert",
+         model_path=f"{S3_ROOT}/visobert_s3_best/visobert_s3_best"),
+    dict(scenario="s3", model_tag="xlmr-s3",
+         base_model="FacebookAI/xlm-roberta-base",
+         model_path=f"{S3_ROOT}/xlm-r_s3_best/xlm-r_s3_best"),
+
+    # BARTpho là kiến trúc seq2seq (mBART), không dùng chung loader được.
+    # checkpoint_loader sẽ báo lỗi rõ ràng chứ không cho ra số rác.
+    # dict(scenario="s3", model_tag="bartpho-s3",
+    #      base_model="vinai/bartpho-syllable",
+    #      model_path=f"{S3_ROOT}/bartpho_s3_best/bartpho_s3_best"),
 ]
+
+# Kiến trúc -> checkpoint gốc trên HF. Khớp MODEL_ZOO trong train_baseline.py.
+# Thứ tự quan trọng: khoá dài/đặc thù phải đứng trước (bartpho trước pho).
+MODEL_ZOO = [
+    ("bartpho",  "bartpho",  "vinai/bartpho-syllable"),
+    ("vit5",     "vit5",     "VietAI/vit5-base"),
+    ("visobert", "visobert", "uitnlp/visobert"),
+    ("cafebert", "cafebert", "uitnlp/CafeBERT"),
+    ("cafe",     "cafebert", "uitnlp/CafeBERT"),
+    ("phobert",  "phobert",  "vinai/phobert-base-v2"),
+    ("pho",      "phobert",  "vinai/phobert-base-v2"),
+    ("vibert",   "vibert",   "FPTAI/vibert-base-cased"),
+    ("mbert",    "mbert",    "google-bert/bert-base-multilingual-cased"),
+    ("xlmr",     "xlmr",     "FacebookAI/xlm-roberta-base"),
+]
+
+
+def _norm(s):
+    return s.lower().replace("-", "").replace("_", "").replace(" ", "")
+
+
+def guess_arch(name):
+    """Đoán (tên kiến trúc, base_model) từ tên thư mục."""
+    n = _norm(name)
+    for key, arch, base in MODEL_ZOO:
+        if key in n:
+            return arch, base
+    return None, None
+
+
+def guess_scenario(name, default="s3"):
+    n = _norm(name)
+    for s in ("s1", "s2", "s3"):
+        if s in n:
+            return s
+    return default
+
+
+def discover(root, scenario=None, pattern="*", default_scenario="s3", quiet=False):
+    """Quét một thư mục, tự sinh danh sách checkpoint.
+
+        R.CHECKPOINTS = R.discover("/kaggle/input/.../vigoemotions-pretrained-s3")
+
+    Tên kiến trúc và base_model suy ra từ tên thư mục; scenario lấy từ tên
+    (s1/s2/s3) hoặc từ tham số `scenario` nếu bạn ép.
+    Thư mục nào không đoán được kiến trúc sẽ bị bỏ qua và liệt kê ra.
+    """
+    root = Path(root)
+    if not root.exists():
+        print(f"[!] không tồn tại: {root}")
+        return []
+
+    out, skipped = [], []
+    for p in sorted(root.glob(pattern)):
+        if not p.is_dir():
+            continue
+        arch, base = guess_arch(p.name)
+        if arch is None:
+            skipped.append(p.name)
+            continue
+        sc = scenario or guess_scenario(p.name, default_scenario)
+        out.append(dict(scenario=sc, model_tag=f"{arch}-{sc}",
+                        base_model=base, model_path=str(p)))
+
+    # tag trùng -> thêm hậu tố để kết quả không ghi đè nhau
+    seen = {}
+    for d in out:
+        t = d["model_tag"]
+        seen[t] = seen.get(t, 0) + 1
+        if seen[t] > 1:
+            d["model_tag"] = f"{t}-{seen[t]}"
+
+    if not quiet:
+        if out:
+            print(pd.DataFrame(out)[["model_tag", "scenario", "base_model", "model_path"]]
+                  .to_string(index=False))
+        print(f"\ntìm thấy {len(out)} checkpoint")
+        if skipped:
+            print(f"bỏ qua {len(skipped)} thư mục không đoán được kiến trúc: {skipped}")
+            print("-> thêm thủ công bằng R.CHECKPOINTS += [dict(...)] nếu cần")
+    return out
+
+
+def discover_many(roots, **kw):
+    """Gộp nhiều thư mục, ví dụ ba dataset S1/S2/S3 riêng biệt.
+
+        R.CHECKPOINTS = R.discover_many({
+            "s1": "/kaggle/input/vigo-pretrained-s1",
+            "s2": "/kaggle/input/vigo-pretrained-s2",
+            "s3": "/kaggle/input/vigo-pretrained-s3",
+        })
+    """
+    out = []
+    if isinstance(roots, dict):
+        for sc, r in roots.items():
+            print(f"--- {sc} ---")
+            out += discover(r, scenario=sc, **kw)
+    else:
+        for r in roots:
+            out += discover(r, **kw)
+    print(f"\ntổng cộng {len(out)} checkpoint")
+    return out
+
 
 # Macro F1 (%) trên tập dev, Bảng 3 bài báo — dùng để tự kiểm tra tiền xử lý
 PAPER_MF1 = {
