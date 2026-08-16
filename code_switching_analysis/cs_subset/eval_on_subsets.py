@@ -63,9 +63,14 @@ SUBSET_DEFS = {
 # Data
 # ---------------------------------------------------------------------------
 
-def load_annotations(path: str, split: str):
+def load_annotations(path: str, split: str, text_col: str = "text"):
     df = pd.read_csv(path)
     df = df[df["split"] == split].reset_index(drop=True)
+    if text_col != "text":
+        if text_col not in df.columns:
+            raise KeyError(f"Thiếu cột '{text_col}'. Có: "
+                           f"{[c for c in df.columns if c.startswith('text')]}")
+        df["text"] = df[text_col]
     label_cols = [f"label_{n}" for n in LABEL_NAMES]
     if all(c in df.columns for c in label_cols):
         y = df[label_cols].to_numpy(dtype=np.int8)
@@ -81,118 +86,9 @@ def load_annotations(path: str, split: str):
 # Inference
 # ---------------------------------------------------------------------------
 
-HF_WEIGHT_NAMES = ("model.safetensors", "pytorch_model.bin",
-                   "model.safetensors.index.json", "pytorch_model.bin.index.json")
-STATE_DICT_EXTS = (".pt", ".pth", ".bin", ".ckpt", ".safetensors")
-
-
-def resolve_checkpoint(model_path: str):
-    """Tìm ra dạng checkpoint thực tế.
-
-    Trả về ('hf_dir', path)      -> thư mục save_pretrained hợp lệ
-           ('state_dict', path)  -> file .pt/.pth/.bin chứa state_dict
-
-    Kaggle Models hay bọc thêm vài lớp thư mục, và nhiều notebook train lưu bằng
-    torch.save(model.state_dict(), ...) thay vì save_pretrained().
-    """
-    p = Path(model_path)
-    if p.is_file():
-        return ("state_dict", p)
-    if not p.exists():
-        raise FileNotFoundError(f"Không tồn tại: {p}")
-
-    # thư mục HF hợp lệ?
-    def is_hf_dir(d: Path) -> bool:
-        return (d / "config.json").exists() and any((d / w).exists() for w in HF_WEIGHT_NAMES)
-
-    if is_hf_dir(p):
-        return ("hf_dir", p)
-
-    for d in sorted(x for x in p.rglob("*") if x.is_dir()):
-        if is_hf_dir(d):
-            print(f"    [i] tìm thấy checkpoint HF ở thư mục con: {d}")
-            return ("hf_dir", d)
-
-    # file state_dict rời
-    cands = [f for f in p.rglob("*") if f.is_file() and f.suffix.lower() in STATE_DICT_EXTS]
-    if cands:
-        cands.sort(key=lambda f: f.stat().st_size, reverse=True)
-        print(f"    [i] không thấy thư mục save_pretrained, dùng state_dict: {cands[0]}")
-        return ("state_dict", cands[0])
-
-    listing = "\n      ".join(str(f) for f in list(p.rglob("*"))[:30])
-    raise FileNotFoundError(
-        f"Không tìm thấy trọng số trong {p}.\nNội dung:\n      {listing}\n"
-        "Nếu checkpoint còn nén .zip thì giải nén trước, hoặc truyền thẳng đường dẫn file .pt."
-    )
-
-
-def _clean_state_dict(sd):
-    """Bóc các lớp bọc thường gặp: DataParallel, Lightning, dict lồng nhau."""
-    for key in ("state_dict", "model_state_dict", "model"):
-        if isinstance(sd, dict) and key in sd and isinstance(sd[key], dict):
-            sd = sd[key]
-            break
-    if not isinstance(sd, dict):
-        raise ValueError("File checkpoint không chứa state_dict dạng dict.")
-    out = {}
-    for k, v in sd.items():
-        for prefix in ("module.", "model.", "_orig_mod."):
-            if k.startswith(prefix):
-                k = k[len(prefix):]
-        out[k] = v
-    return out
-
-
-def load_model_and_tokenizer(model_path: str, base_model: str = None,
-                             tokenizer_path: str = None, use_fast: bool = True):
-    import torch
-    from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
-
-    kind, path = resolve_checkpoint(model_path)
-
-    if kind == "hf_dir":
-        tok_src = tokenizer_path or (str(path) if (path / "tokenizer_config.json").exists()
-                                     else base_model)
-        if tok_src is None:
-            raise ValueError("Checkpoint không có tokenizer. Truyền --tokenizer hoặc --base-model.")
-        tok = AutoTokenizer.from_pretrained(tok_src, use_fast=use_fast)
-        model = AutoModelForSequenceClassification.from_pretrained(
-            str(path), num_labels=NUM_LABELS, problem_type="multi_label_classification"
-        )
-        return model, tok
-
-    # state_dict rời -> cần biết kiến trúc gốc
-    if not base_model:
-        raise ValueError(
-            f"Checkpoint {path} là state_dict rời. Cần truyền --base-model, ví dụ:\n"
-            "  --base-model FPTAI/vibert-base-cased\n"
-            "  --base-model xlm-roberta-base | vinai/phobert-base | uitnlp/visobert\n"
-            "  --base-model bert-base-multilingual-cased | uitnlp/CafeBERT"
-        )
-    tok = AutoTokenizer.from_pretrained(tokenizer_path or base_model, use_fast=use_fast)
-    config = AutoConfig.from_pretrained(base_model, num_labels=NUM_LABELS,
-                                        problem_type="multi_label_classification")
-    model = AutoModelForSequenceClassification.from_config(config)
-
-    if path.suffix.lower() == ".safetensors":
-        from safetensors.torch import load_file
-        sd = load_file(str(path))
-    else:
-        sd = torch.load(str(path), map_location="cpu", weights_only=False)
-    sd = _clean_state_dict(sd)
-
-    missing, unexpected = model.load_state_dict(sd, strict=False)
-    print(f"    [i] load_state_dict: missing={len(missing)} unexpected={len(unexpected)}")
-    if missing:
-        print(f"        missing (5 đầu): {list(missing)[:5]}")
-    if unexpected:
-        print(f"        unexpected (5 đầu): {list(unexpected)[:5]}")
-    if len(missing) > 0.5 * len(list(model.state_dict())):
-        raise RuntimeError(
-            "Quá nhiều trọng số không khớp -> --base-model nhiều khả năng sai kiến trúc."
-        )
-    return model, tok
+from checkpoint_loader import (load_model_and_tokenizer, resolve_checkpoint,
+                               inspect_checkpoint, detect_structure,
+                               sanity_check_predictions)
 
 
 def predict_proba(texts, model_path: str, max_length: int, batch_size: int,
@@ -305,6 +201,8 @@ def main() -> None:
                     help="Nguồn tokenizer nếu checkpoint không kèm tokenizer")
     ap.add_argument("--model-tag", default="model")
     ap.add_argument("--split", default="test")
+    ap.add_argument("--text-col", default="text",
+                    help="Cột văn bản dùng làm đầu vào, vd text_s1 / text_s2 / text_s3")
     ap.add_argument("--out-dir", default="./subset_eval")
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--tune-threshold", action="store_true",
@@ -326,7 +224,7 @@ def main() -> None:
     threshold = args.threshold
     if args.tune_threshold:
         print("[*] Tune threshold trên val ...")
-        val_df, val_y = load_annotations(args.annotations, "val")
+        val_df, val_y = load_annotations(args.annotations, "val", args.text_col)
         val_prob = predict_proba(val_df["text"].astype(str).tolist(), args.model,
                                  args.max_length, args.batch_size, not args.slow_tokenizer,
                                  args.base_model, args.tokenizer)
@@ -335,7 +233,7 @@ def main() -> None:
 
     # 2. inference trên split đích
     print(f"[*] Inference trên split={args.split} ...")
-    df, y_true = load_annotations(args.annotations, args.split)
+    df, y_true = load_annotations(args.annotations, args.split, args.text_col)
     if args.probs_npy and Path(args.probs_npy).exists():
         y_prob = np.load(args.probs_npy)
     else:
@@ -344,6 +242,7 @@ def main() -> None:
                                args.base_model, args.tokenizer)
         np.save(out_dir / f"probs_{args.split}.npy", y_prob)
     y_pred = (y_prob >= threshold).astype(int)
+    sanity_check_predictions(y_prob, threshold=threshold)
 
     # 3. metric theo subset
     print("[*] Tính metric theo subset ...")
