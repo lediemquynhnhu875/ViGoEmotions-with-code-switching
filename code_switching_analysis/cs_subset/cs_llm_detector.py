@@ -254,6 +254,22 @@ def _pick_flash(names):
 _DENIED = ("PERMISSION_DENIED", "NOT_FOUND", "403", "404",
            "denied access", "is not found", "not supported")
 
+_RATE = ("429", "RESOURCE_EXHAUSTED", "rate-limited", "rate limit",
+         "RateLimit", "quota", "overloaded", "503", "Provider returned error")
+
+
+def _is_rate(msg: str) -> bool:
+    return any(k in msg for k in _RATE)
+
+
+def _retry_after(msg: str, default: float = 5.0) -> float:
+    """Lấy thời gian chờ mà nhà cung cấp gợi ý trong thông báo lỗi."""
+    m = re.search(r"retry_after_seconds['\"]?\s*[:=]\s*(\d+)", msg) or \
+        re.search(r"Retry-After['\"]?\s*[:=]\s*['\"]?(\d+)", msg)
+    if m:
+        return min(float(m.group(1)), 60.0)
+    return default
+
 
 class GeminiBackend:
     def __init__(self, api_key=None, model="auto"):
@@ -299,6 +315,11 @@ class GeminiBackend:
                 return r.text
             except Exception as e:
                 msg = str(e)
+                if _is_rate(msg) and not any(k in msg for k in ("404", "403")):
+                    w = _retry_after(msg)
+                    print(f"    [chờ] {self.model} quá tải, nghỉ {w:.0f}s")
+                    time.sleep(w)
+                    continue
                 if any(k in msg for k in _DENIED):
                     print(f"    [bỏ] {self.model}: bị từ chối, thử model kế tiếp")
                     self.candidates.pop(0)
@@ -425,7 +446,8 @@ class OpenRouterBackend:
     """
 
     def __init__(self, api_key=None, model="auto", base_url="https://openrouter.ai/api/v1",
-                 site="https://kaggle.com", title="ViGoEmotions-CS", json_mode=True):
+                 site="https://kaggle.com", title="ViGoEmotions-CS", json_mode=True,
+                 max_rate_retry=4):
         from openai import OpenAI
         key = api_key or os.environ.get("OPENROUTER_API_KEY")
         if not key:
@@ -433,6 +455,7 @@ class OpenRouterBackend:
         self.client = OpenAI(api_key=key, base_url=base_url)
         self.headers = {"HTTP-Referer": site, "X-Title": title}
         self.json_mode = json_mode
+        self.max_rate_retry = max_rate_retry
 
         if model == "auto":
             self.candidates = _rank_openrouter(key)
@@ -445,6 +468,7 @@ class OpenRouterBackend:
     def __call__(self, user_prompt):
         msgs = [{"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt}]
+        rate_hits = 0
         while self.candidates:
             kw = dict(model=self.model, temperature=0.0, messages=msgs,
                       extra_headers=self.headers)
@@ -458,6 +482,29 @@ class OpenRouterBackend:
                 return r.choices[0].message.content
             except Exception as e:
                 msg = str(e)
+
+                # 429 / quá tải: chờ theo gợi ý của provider rồi thử lại.
+                # Quá số lần thì mới chuyển sang model khác.
+                if _is_rate(msg) and not any(k in msg for k in ("404", "403")):
+                    rate_hits += 1
+                    if rate_hits <= self.max_rate_retry:
+                        w = _retry_after(msg) * rate_hits
+                        print(f"    [chờ] {self.model} quá tải, nghỉ {w:.0f}s "
+                              f"(lần {rate_hits}/{self.max_rate_retry})")
+                        time.sleep(w)
+                        continue
+                    print(f"    [bỏ] {self.model}: quá tải liên tục, đổi model")
+                    self.candidates.pop(0)
+                    if not self.candidates:
+                        raise RuntimeError(
+                            "Mọi model đều quá tải. Cách xử lý:\n"
+                            "  - tăng sleep=5 trong annotate()\n"
+                            "  - hoặc dùng model trả phí: "
+                            "model='qwen/qwen-2.5-72b-instruct' (~0.3 USD cho 4133 câu)\n"
+                            "  - hoặc chạy local: backend='local'") from e
+                    self.model = self.candidates[0]
+                    self.json_mode, rate_hits = True, 0
+                    continue
                 # model không hỗ trợ json mode -> thử lại ở chế độ text
                 if self.json_mode and ("response_format" in msg or "json" in msg.lower()):
                     print(f"    [i] {self.model} không hỗ trợ json mode -> chuyển sang text")
@@ -497,23 +544,66 @@ class OpenRouterBackend:
 
 
 class LocalBackend:
-    """Qwen2.5-7B-Instruct trên GPU Kaggle. Không cần API key."""
+    """Chạy LLM ngay trên GPU Kaggle. Không cần API key, không hạn mức.
+
+    Tự thích ứng với môi trường:
+      * GPU T4 (Turing) không hỗ trợ bfloat16 -> dùng float16
+      * Không có bitsandbytes -> bỏ lượng tử hoá 4-bit, và nếu VRAM không đủ
+        thì tự hạ xuống model nhỏ hơn thay vì OOM
+      * transformers mới đổi `torch_dtype` thành `dtype` -> thử cả hai
+    """
+
+    SMALLER = {"Qwen/Qwen2.5-7B-Instruct": "Qwen/Qwen2.5-3B-Instruct",
+               "Qwen/Qwen2.5-14B-Instruct": "Qwen/Qwen2.5-7B-Instruct"}
 
     def __init__(self, model="Qwen/Qwen2.5-7B-Instruct", max_new_tokens=2048,
-                 load_in_4bit=True):
+                 load_in_4bit=True, dtype=None):
+        import importlib.util
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
-        kw = dict(torch_dtype=torch.bfloat16, device_map="auto")
+
+        has_cuda = torch.cuda.is_available()
+        if not has_cuda:
+            print("[!] không thấy GPU — sẽ rất chậm. Bật Accelerator trong Settings.")
+        cap = torch.cuda.get_device_capability(0) if has_cuda else (0, 0)
+        vram = (torch.cuda.get_device_properties(0).total_memory / 1e9) if has_cuda else 0
+        if dtype is None:
+            dtype = torch.bfloat16 if cap[0] >= 8 else torch.float16
+        print(f"[i] GPU cc={cap[0]}.{cap[1]} vram={vram:.0f}GB dtype={dtype}")
+
+        has_bnb = importlib.util.find_spec("bitsandbytes") is not None
+        if load_in_4bit and not has_bnb:
+            print("[!] chưa có bitsandbytes -> tắt 4-bit.\n"
+                  "    Muốn dùng model 7B trên T4, chạy: !pip install -U bitsandbytes")
+            load_in_4bit = False
+
+        # không lượng tử hoá thì ước lượng VRAM: ~2 byte/tham số + activation
+        if not load_in_4bit and vram:
+            m = re.search(r"(\d+(?:\.\d+)?)\s*[bB]\b", model)
+            need = float(m.group(1)) * 2.4 if m else 0
+            if need and need > vram * 0.85 and model in self.SMALLER:
+                alt = self.SMALLER[model]
+                print(f"[!] {model} cần ~{need:.0f}GB, GPU chỉ có {vram:.0f}GB "
+                      f"-> chuyển sang {alt}")
+                model = alt
+
+        kw = {"device_map": "auto"}
         if load_in_4bit:
-            try:
-                from transformers import BitsAndBytesConfig
-                kw["quantization_config"] = BitsAndBytesConfig(
-                    load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
-            except Exception:
-                pass
+            from transformers import BitsAndBytesConfig
+            kw["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_compute_dtype=dtype,
+                bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
+            print("[i] nạp ở chế độ 4-bit")
+
         self.tok = AutoTokenizer.from_pretrained(model)
-        self.model = AutoModelForCausalLM.from_pretrained(model, **kw).eval()
+        try:                                   # transformers mới
+            self.model = AutoModelForCausalLM.from_pretrained(model, dtype=dtype, **kw)
+        except TypeError:                      # transformers cũ
+            self.model = AutoModelForCausalLM.from_pretrained(model, torch_dtype=dtype, **kw)
+        self.model = self.model.eval()
+        self.model_name = model
         self.max_new_tokens = max_new_tokens
+        print(f"[i] sẵn sàng: {model}")
 
     def __call__(self, user_prompt):
         import torch
@@ -599,7 +689,11 @@ def annotate(df, backend="gemini", cache="cs_llm_cache.jsonl", splits=("val", "t
     if not todo:
         return cache
 
-    bk = make_backend(backend, **backend_kw)
+    try:
+        bk = make_backend(backend, **backend_kw)
+    except Exception as e:
+        print(f"[DỪNG] không khởi tạo được backend '{backend}': {type(e).__name__}: {e}")
+        return cache
     n_ok = n_fail = 0
     t0 = time.time()
 
