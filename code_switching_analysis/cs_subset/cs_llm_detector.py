@@ -501,7 +501,69 @@ def make_control(df, seed=42):
 
 
 # ---------------------------------------------------------------------------
-# 6. Kiểm chứng
+# 6. Xuất file
+# ---------------------------------------------------------------------------
+def export_subsets(df, out_dir="/kaggle/working/cs_llm", splits=("val", "test"),
+                   formats=("csv",), keep_cols=None):
+    """Tách ra file riêng cho từng (subset × split).
+
+    Cấu trúc:
+        out_dir/annotations/vigo_cs_llm.csv     <- file dùng cho eval_on_subsets.py
+        out_dir/subsets/<subset>/<split>.csv    <- file rời để xem/nộp
+        out_dir/subset_index.csv
+    """
+    out_dir = Path(out_dir)
+    (out_dir / "annotations").mkdir(parents=True, exist_ok=True)
+    ann = out_dir / "annotations" / "vigo_cs_llm.csv"
+    df.to_csv(ann, index=False)
+    print(f"[annotations] {ann}")
+
+    masks = {
+        "all": pd.Series(True, index=df.index),
+        "pure_vi": df["cs_group"].eq("pure_vi"),
+        "cs_strict": df["is_cs_strict"].astype(bool),
+        "english_mixed": df["cs_group"].eq("english_mixed"),
+        "chinese_mixed": df["cs_group"].eq("chinese_mixed"),
+        "teencode_slang": df["cs_group"].eq("teencode_slang"),
+        "emoji_only": df["cs_group"].eq("emoji_only"),
+        "other_noise": df["cs_group"].eq("other_noise"),
+        "cs_heavy": df["cs_level"].eq("heavy"),
+        "cs_light": df["cs_level"].eq("light"),
+    }
+    if "is_cs_broad" in df.columns:
+        masks["cs_broad"] = df["is_cs_broad"].astype(bool)
+    if "control_pure_vi" in df.columns:
+        masks["control_pure_vi"] = df["control_pure_vi"].astype(bool)
+    if "n_translit" in df.columns:
+        masks["translit_only"] = df["is_cs_strict"] & df["n_translit"].gt(0)
+
+    cols = keep_cols or [c for c in df.columns if not c.startswith("label_")]
+    rows = []
+    for name, m in masks.items():
+        for sp in splits:
+            part = df[m & df["split"].eq(sp)]
+            if len(part) == 0:
+                continue
+            d = out_dir / "subsets" / name
+            d.mkdir(parents=True, exist_ok=True)
+            if "csv" in formats:
+                part[cols].to_csv(d / f"{sp}.csv", index=False)
+            if "jsonl" in formats:
+                part[cols].to_json(d / f"{sp}.jsonl", orient="records",
+                                   lines=True, force_ascii=False)
+            rows.append({"subset": name, "split": sp, "n": len(part),
+                         "pct_split": round(100 * len(part) / max(df["split"].eq(sp).sum(), 1), 2)})
+
+    idx = pd.DataFrame(rows)
+    idx.to_csv(out_dir / "subset_index.csv", index=False)
+    print()
+    print(idx.pivot(index="subset", columns="split", values="n").fillna(0).astype(int).to_string())
+    print(f"\n-> {out_dir}")
+    return idx
+
+
+# ---------------------------------------------------------------------------
+# 7. Kiểm chứng
 # ---------------------------------------------------------------------------
 def agreement(df, rule_col="is_cs_strict_rule", llm_col="is_cs_strict"):
     """So nhãn LLM với nhãn bộ luật. Cần cột nhãn bộ luật đã đổi tên."""
