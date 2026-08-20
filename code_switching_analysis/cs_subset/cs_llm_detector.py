@@ -357,17 +357,65 @@ def list_openrouter_models(api_key=None, free_only=True, query="", limit=40):
     return [x["id"] for x in rows]
 
 
-# Thứ tự thử mặc định trên OpenRouter. Ưu tiên model mạnh tiếng Trung + tiếng Việt.
-OPENROUTER_DEFAULTS = [
-    "deepseek/deepseek-chat-v3-0324:free",
-    "qwen/qwen-2.5-72b-instruct:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "google/gemma-3-27b-it:free",
-    "qwen/qwen-2.5-7b-instruct:free",
-    "deepseek/deepseek-chat",
-    "qwen/qwen-2.5-72b-instruct",
-    "google/gemini-2.0-flash-001",
-]
+# Ưu tiên theo họ model: Qwen và DeepSeek mạnh tiếng Trung nhất, hợp với việc
+# phát hiện phiên âm Hán-Việt.
+OR_FAMILY_RANK = ["qwen", "deepseek", "glm", "minimax", "llama", "gemma",
+                  "mistral", "gemini", "gpt"]
+OR_BAD = ("vision", "-vl-", "-vl:", "image", "embed", "tts", "audio", "coder",
+          "math", "guard", "rerank", "distill", "-1b", "-2b", "-3b", "-4b",
+          "thinking", "-r1", "reasoner")
+
+
+def _fetch_openrouter(api_key=None):
+    """Lấy danh sách model đang sống từ OpenRouter."""
+    import requests
+    key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    h = {"Authorization": f"Bearer {key}"} if key else {}
+    r = requests.get("https://openrouter.ai/api/v1/models", headers=h, timeout=30)
+    r.raise_for_status()
+    out = []
+    for m in r.json().get("data", []):
+        pr = m.get("pricing", {}) or {}
+        free = str(pr.get("prompt", "1")) in ("0", "0.0") and \
+               str(pr.get("completion", "1")) in ("0", "0.0")
+        out.append({"id": m.get("id", ""), "free": free,
+                    "ctx": m.get("context_length") or 0,
+                    "price": float(pr.get("prompt") or 0)})
+    return out
+
+
+def _rank_openrouter(api_key=None, prefer_free=True, min_ctx=8000):
+    """Xếp hạng model OpenRouter theo mức phù hợp với tác vụ này.
+
+    Lấy danh sách trực tiếp từ API thay vì dùng slug cứng — slug :free bị gỡ
+    hoặc đổi tên khá thường xuyên.
+    """
+    try:
+        models = _fetch_openrouter(api_key)
+    except Exception as e:
+        print(f"[!] không lấy được danh sách model ({type(e).__name__}) — dùng mặc định")
+        return ["deepseek/deepseek-chat", "qwen/qwen-2.5-72b-instruct",
+                "google/gemini-2.0-flash-001"]
+
+    def fam(mid):
+        for i, f in enumerate(OR_FAMILY_RANK):
+            if f in mid.lower():
+                return len(OR_FAMILY_RANK) - i
+        return 0
+
+    cand = [m for m in models
+            if not any(b in m["id"].lower() for b in OR_BAD)
+            and m["ctx"] >= min_ctx and fam(m["id"]) > 0]
+
+    free = sorted([m for m in cand if m["free"]],
+                  key=lambda m: (fam(m["id"]), m["ctx"]), reverse=True)
+    paid = sorted([m for m in cand if not m["free"]],
+                  key=lambda m: (fam(m["id"]), -m["price"], m["ctx"]), reverse=True)
+
+    ids = ([m["id"] for m in free] + [m["id"] for m in paid]) if prefer_free \
+        else ([m["id"] for m in paid] + [m["id"] for m in free])
+    print(f"[i] {len(free)} model miễn phí, {len(paid)} model trả phí phù hợp")
+    return ids[:12]
 
 
 class OpenRouterBackend:
@@ -387,15 +435,7 @@ class OpenRouterBackend:
         self.json_mode = json_mode
 
         if model == "auto":
-            avail = []
-            try:
-                avail = list_openrouter_models(key, free_only=True, limit=0)
-            except Exception as e:
-                print(f"[!] không liệt kê được model ({type(e).__name__})")
-            self.candidates = [m for m in OPENROUTER_DEFAULTS
-                               if not avail or m in avail or not m.endswith(":free")]
-            if not self.candidates:
-                self.candidates = list(OPENROUTER_DEFAULTS)
+            self.candidates = _rank_openrouter(key)
             print(f"[i] thứ tự thử: {self.candidates[:5]}")
         else:
             self.candidates = [model]
@@ -423,6 +463,16 @@ class OpenRouterBackend:
                     print(f"    [i] {self.model} không hỗ trợ json mode -> chuyển sang text")
                     self.json_mode = False
                     continue
+                # OpenRouter thường chỉ luôn slug thay thế trong thông báo lỗi
+                alt = re.search(r"use this slug instead:\s*([\w\-./:]+)", msg)
+                if alt and alt.group(1) not in self.candidates:
+                    new = alt.group(1)
+                    print(f"    [i] {self.model} đã bị gỡ -> dùng slug thay thế: {new}")
+                    self.candidates[0] = new
+                    self.model = new
+                    self.json_mode = True
+                    continue
+
                 if any(k in msg for k in _DENIED) or "No endpoints" in msg \
                         or "not a valid model" in msg:
                     print(f"    [bỏ] {self.model}\n         lý do: {msg[:300]}")
