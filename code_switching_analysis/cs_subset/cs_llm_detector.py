@@ -214,21 +214,31 @@ def list_gemini_models(api_key=None, only_generate=True):
     return names
 
 
-def _pick_flash(names):
-    """Chọn model flash mới nhất, bỏ các biến thể không hợp cho tác vụ này."""
-    bad = ("tts", "image", "embedding", "vision", "aqa", "live", "native-audio")
+def _rank_flash(names):
+    """Xếp hạng model theo thứ tự ưu tiên dùng thử.
+
+    Model mới nhất chưa chắc dùng được — gói miễn phí thường bị chặn (403).
+    Trả về cả danh sách để backend tự lùi xuống bản cũ hơn khi bị từ chối.
+    """
+    bad = ("tts", "image", "embedding", "vision", "aqa", "live", "native-audio",
+           "thinking", "exp-", "learnlm", "gemma")
     cand = [n for n in names if "flash" in n and not any(b in n for b in bad)]
     if not cand:
-        cand = [n for n in names if not any(b in n for b in bad)]
-    if not cand:
-        return None
+        cand = [n for n in names if "gemini" in n and not any(b in n for b in bad)]
     def score(n):
-        v = 0.0
         m = re.search(r"(\d+)\.(\d+)", n)
-        if m:
-            v = int(m.group(1)) * 10 + int(m.group(2))
+        v = int(m.group(1)) * 10 + int(m.group(2)) if m else 0
         return (v, "lite" not in n, "preview" not in n, "latest" in n, -len(n))
-    return sorted(cand, key=score, reverse=True)[0]
+    return sorted(cand, key=score, reverse=True)
+
+
+def _pick_flash(names):
+    r = _rank_flash(names)
+    return r[0] if r else None
+
+
+_DENIED = ("PERMISSION_DENIED", "NOT_FOUND", "403", "404",
+           "denied access", "is not found", "not supported")
 
 
 class GeminiBackend:
@@ -250,25 +260,44 @@ class GeminiBackend:
                     if not acts or "generateContent" in acts:
                         names.append(n)
             except Exception as e:
-                print(f"[!] không liệt kê được model ({type(e).__name__}) — dùng mặc định")
-            model = _pick_flash(names) or "gemini-2.0-flash"
-            print(f"[i] tự chọn model: {model}")
-            if names:
-                print(f"    (có {len(names)} model khả dụng; "
-                      f"xem hết bằng L.list_gemini_models(key))")
-        self.model = model
+                print(f"[!] không liệt kê được model ({type(e).__name__})")
+            self.candidates = _rank_flash(names) or [
+                "gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest",
+                "gemini-1.5-flash"]
+            print(f"[i] thứ tự thử: {self.candidates[:6]}")
+        else:
+            self.candidates = [model]
+        self.model = self.candidates[0]
+        self._verified = False
 
     def __call__(self, user_prompt):
-        r = self.client.models.generate_content(
-            model=self.model,
-            contents=user_prompt,
-            config=self._types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                temperature=0.0,
-                response_mime_type="application/json",
-            ),
-        )
-        return r.text
+        cfg = self._types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT, temperature=0.0,
+            response_mime_type="application/json")
+        last = None
+        while self.candidates:
+            try:
+                r = self.client.models.generate_content(
+                    model=self.model, contents=user_prompt, config=cfg)
+                if not self._verified:
+                    print(f"    [i] dùng model: {self.model}")
+                    self._verified = True
+                return r.text
+            except Exception as e:
+                msg = str(e)
+                if any(k in msg for k in _DENIED):
+                    print(f"    [bỏ] {self.model}: bị từ chối, thử model kế tiếp")
+                    self.candidates.pop(0)
+                    if not self.candidates:
+                        raise RuntimeError(
+                            "Không model nào dùng được với API key này. "
+                            "Chạy L.list_gemini_models(key) để xem danh sách "
+                            "rồi truyền model='...' thủ công.") from e
+                    self.model = self.candidates[0]
+                    last = e
+                    continue
+                raise            # lỗi khác (quota, mạng) -> để annotate() retry
+        raise last
 
 
 class OpenAIBackend:
