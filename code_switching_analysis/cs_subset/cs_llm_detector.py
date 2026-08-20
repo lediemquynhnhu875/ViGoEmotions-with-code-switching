@@ -193,8 +193,46 @@ def _extract_json(s: str):
     return json.loads(s)
 
 
+def list_gemini_models(api_key=None, only_generate=True):
+    """Liệt kê model mà API key của bạn thực sự dùng được.
+
+    Tên model Gemini thay đổi theo thời gian và theo khu vực, nên đừng đoán —
+    chạy hàm này trước.
+    """
+    from google import genai
+    key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    client = genai.Client(api_key=key)
+    names = []
+    for m in client.models.list():
+        n = getattr(m, "name", "")
+        acts = getattr(m, "supported_actions", None) or []
+        if only_generate and acts and "generateContent" not in acts:
+            continue
+        names.append(n.replace("models/", ""))
+    for n in names:
+        print("  ", n)
+    return names
+
+
+def _pick_flash(names):
+    """Chọn model flash mới nhất, bỏ các biến thể không hợp cho tác vụ này."""
+    bad = ("tts", "image", "embedding", "vision", "aqa", "live", "native-audio")
+    cand = [n for n in names if "flash" in n and not any(b in n for b in bad)]
+    if not cand:
+        cand = [n for n in names if not any(b in n for b in bad)]
+    if not cand:
+        return None
+    def score(n):
+        v = 0.0
+        m = re.search(r"(\d+)\.(\d+)", n)
+        if m:
+            v = int(m.group(1)) * 10 + int(m.group(2))
+        return (v, "lite" not in n, "preview" not in n, "latest" in n, -len(n))
+    return sorted(cand, key=score, reverse=True)[0]
+
+
 class GeminiBackend:
-    def __init__(self, api_key=None, model="gemini-2.5-flash"):
+    def __init__(self, api_key=None, model="auto"):
         from google import genai
         from google.genai import types
         self._types = types
@@ -202,6 +240,22 @@ class GeminiBackend:
         if not key:
             raise ValueError("Thiếu API key. Truyền api_key=... hoặc đặt biến GEMINI_API_KEY.")
         self.client = genai.Client(api_key=key)
+
+        if model == "auto":
+            names = []
+            try:
+                for m in self.client.models.list():
+                    n = getattr(m, "name", "").replace("models/", "")
+                    acts = getattr(m, "supported_actions", None) or []
+                    if not acts or "generateContent" in acts:
+                        names.append(n)
+            except Exception as e:
+                print(f"[!] không liệt kê được model ({type(e).__name__}) — dùng mặc định")
+            model = _pick_flash(names) or "gemini-2.0-flash"
+            print(f"[i] tự chọn model: {model}")
+            if names:
+                print(f"    (có {len(names)} model khả dụng; "
+                      f"xem hết bằng L.list_gemini_models(key))")
         self.model = model
 
     def __call__(self, user_prompt):
@@ -362,18 +416,29 @@ def annotate(df, backend="gemini", cache="cs_llm_cache.jsonl", splits=("val", "t
 CS_TYPES_STRICT = {"english", "chinese_script", "chinese_translit", "other_foreign"}
 
 
+CACHE_COLS = ["id", "text", "_tag", "has_cs", "langs", "tokens", "confidence"]
+
+
 def load_cache(cache="cs_llm_cache.jsonl", tag=None):
+    p = Path(cache)
     rows = []
-    for line in Path(cache).read_text(encoding="utf-8").splitlines():
-        try:
-            o = json.loads(line)
-        except Exception:
-            continue
-        if tag and o.get("_tag") != tag:
-            continue
-        rows.append(o)
+    if p.exists():
+        for line in p.read_text(encoding="utf-8").splitlines():
+            try:
+                o = json.loads(line)
+            except Exception:
+                continue
+            if tag and o.get("_tag") != tag:
+                continue
+            rows.append(o)
+    if not rows:
+        print(f"[!] cache rỗng: {p}  — chưa có câu nào được gán nhãn thành công")
+        return pd.DataFrame(columns=CACHE_COLS)
     d = pd.DataFrame(rows)
-    return d.drop_duplicates(subset=["id", "_tag"], keep="last") if len(d) else d
+    for c in CACHE_COLS:
+        if c not in d.columns:
+            d[c] = None
+    return d.drop_duplicates(subset=["id", "_tag"], keep="last")
 
 
 def build_subsets(df, cache="cs_llm_cache.jsonl", tag=None, id_col="id",
