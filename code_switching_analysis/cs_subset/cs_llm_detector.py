@@ -185,11 +185,25 @@ def build_user_prompt(batch):
 # 3. Backend
 # ---------------------------------------------------------------------------
 def _extract_json(s: str):
-    s = s.strip()
+    """Bóc JSON ra khỏi markdown, lời dẫn, hoặc phần suy luận của model."""
+    s = (s or "").strip()
     s = re.sub(r"^```(?:json)?\s*|\s*```$", "", s, flags=re.MULTILINE).strip()
+    s = re.sub(r"<think>.*?</think>", "", s, flags=re.DOTALL).strip()
     i, j = s.find("["), s.rfind("]")
     if i >= 0 and j > i:
-        s = s[i:j + 1]
+        try:
+            return json.loads(s[i:j + 1])
+        except Exception:
+            pass
+    i, j = s.find("{"), s.rfind("}")
+    if i >= 0 and j > i:
+        o = json.loads(s[i:j + 1])
+        if isinstance(o, dict):
+            for k in ("results", "data", "items", "output", "sentences"):
+                if isinstance(o.get(k), list):
+                    return o[k]
+            return [o]
+        return o
     return json.loads(s)
 
 
@@ -316,6 +330,114 @@ class OpenAIBackend:
         return r.choices[0].message.content
 
 
+def list_openrouter_models(api_key=None, free_only=True, query="", limit=40):
+    """Liệt kê model trên OpenRouter. Đặt free_only=True để chỉ lấy model miễn phí."""
+    import requests
+    key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    h = {"Authorization": f"Bearer {key}"} if key else {}
+    r = requests.get("https://openrouter.ai/api/v1/models", headers=h, timeout=30)
+    r.raise_for_status()
+    rows = []
+    for m in r.json().get("data", []):
+        mid = m.get("id", "")
+        pr = m.get("pricing", {}) or {}
+        free = str(pr.get("prompt", "1")) in ("0", "0.0") and \
+               str(pr.get("completion", "1")) in ("0", "0.0")
+        if free_only and not free:
+            continue
+        if query and query.lower() not in mid.lower():
+            continue
+        rows.append({"id": mid, "free": free,
+                     "ctx": m.get("context_length"),
+                     "gia_1M_input": pr.get("prompt")})
+    rows.sort(key=lambda x: x["id"])
+    for x in rows[:limit]:
+        print(f"  {x['id']:56s} ctx={x['ctx']}")
+    print(f"\n{len(rows)} model{' miễn phí' if free_only else ''}")
+    return [x["id"] for x in rows]
+
+
+# Thứ tự thử mặc định trên OpenRouter. Ưu tiên model mạnh tiếng Trung + tiếng Việt.
+OPENROUTER_DEFAULTS = [
+    "deepseek/deepseek-chat-v3-0324:free",
+    "qwen/qwen-2.5-72b-instruct:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemma-3-27b-it:free",
+    "qwen/qwen-2.5-7b-instruct:free",
+    "deepseek/deepseek-chat",
+    "qwen/qwen-2.5-72b-instruct",
+    "google/gemini-2.0-flash-001",
+]
+
+
+class OpenRouterBackend:
+    """OpenRouter — một API key dùng được hàng trăm model, có nhiều model miễn phí.
+
+    Lấy key ở https://openrouter.ai/keys
+    """
+
+    def __init__(self, api_key=None, model="auto", base_url="https://openrouter.ai/api/v1",
+                 site="https://kaggle.com", title="ViGoEmotions-CS", json_mode=True):
+        from openai import OpenAI
+        key = api_key or os.environ.get("OPENROUTER_API_KEY")
+        if not key:
+            raise ValueError("Thiếu OpenRouter key. Lấy ở https://openrouter.ai/keys")
+        self.client = OpenAI(api_key=key, base_url=base_url)
+        self.headers = {"HTTP-Referer": site, "X-Title": title}
+        self.json_mode = json_mode
+
+        if model == "auto":
+            avail = []
+            try:
+                avail = list_openrouter_models(key, free_only=True, limit=0)
+            except Exception as e:
+                print(f"[!] không liệt kê được model ({type(e).__name__})")
+            self.candidates = [m for m in OPENROUTER_DEFAULTS
+                               if not avail or m in avail or not m.endswith(":free")]
+            if not self.candidates:
+                self.candidates = list(OPENROUTER_DEFAULTS)
+            print(f"[i] thứ tự thử: {self.candidates[:5]}")
+        else:
+            self.candidates = [model]
+        self.model = self.candidates[0]
+        self._verified = False
+
+    def __call__(self, user_prompt):
+        msgs = [{"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}]
+        while self.candidates:
+            kw = dict(model=self.model, temperature=0.0, messages=msgs,
+                      extra_headers=self.headers)
+            if self.json_mode:
+                kw["response_format"] = {"type": "json_object"}
+            try:
+                r = self.client.chat.completions.create(**kw)
+                if not self._verified:
+                    print(f"    [i] dùng model: {self.model}")
+                    self._verified = True
+                return r.choices[0].message.content
+            except Exception as e:
+                msg = str(e)
+                # model không hỗ trợ json mode -> thử lại ở chế độ text
+                if self.json_mode and ("response_format" in msg or "json" in msg.lower()):
+                    print(f"    [i] {self.model} không hỗ trợ json mode -> chuyển sang text")
+                    self.json_mode = False
+                    continue
+                if any(k in msg for k in _DENIED) or "No endpoints" in msg \
+                        or "not a valid model" in msg:
+                    print(f"    [bỏ] {self.model}: không dùng được, thử model kế tiếp")
+                    self.candidates.pop(0)
+                    if not self.candidates:
+                        raise RuntimeError(
+                            "Không model nào dùng được. Chạy "
+                            "L.list_openrouter_models(key) rồi truyền model='...'") from e
+                    self.model = self.candidates[0]
+                    self.json_mode = True
+                    continue
+                raise
+        raise RuntimeError("hết model để thử")
+
+
 class LocalBackend:
     """Qwen2.5-7B-Instruct trên GPU Kaggle. Không cần API key."""
 
@@ -348,8 +470,8 @@ class LocalBackend:
 
 
 def make_backend(backend="gemini", **kw):
-    return {"gemini": GeminiBackend, "openai": OpenAIBackend,
-            "local": LocalBackend}[backend](**kw)
+    return {"gemini": GeminiBackend, "openrouter": OpenRouterBackend,
+            "openai": OpenAIBackend, "local": LocalBackend}[backend](**kw)
 
 
 # ---------------------------------------------------------------------------
