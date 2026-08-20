@@ -425,12 +425,20 @@ class OpenRouterBackend:
                     continue
                 if any(k in msg for k in _DENIED) or "No endpoints" in msg \
                         or "not a valid model" in msg:
-                    print(f"    [bỏ] {self.model}: không dùng được, thử model kế tiếp")
+                    print(f"    [bỏ] {self.model}\n         lý do: {msg[:300]}")
+                    if "data policy" in msg or "No endpoints" in msg:
+                        print("         >>> Nhiều khả năng do CÀI ĐẶT QUYỀN RIÊNG TƯ.\n"
+                              "             Vào https://openrouter.ai/settings/privacy và bật\n"
+                              "             'Enable training and logging' — model :free bắt buộc\n"
+                              "             phải bật mục này mới có endpoint.")
                     self.candidates.pop(0)
                     if not self.candidates:
                         raise RuntimeError(
-                            "Không model nào dùng được. Chạy "
-                            "L.list_openrouter_models(key) rồi truyền model='...'") from e
+                            f"Không model nào dùng được.\nLỗi cuối: {msg[:400]}\n"
+                            "Kiểm tra theo thứ tự:\n"
+                            "  1. https://openrouter.ai/settings/privacy -> bật training/logging\n"
+                            "  2. L.list_openrouter_models(key) -> lấy đúng id model\n"
+                            "  3. L.test_backend('openrouter', api_key=key, model='...')") from e
                     self.model = self.candidates[0]
                     self.json_mode = True
                     continue
@@ -472,6 +480,40 @@ class LocalBackend:
 def make_backend(backend="gemini", **kw):
     return {"gemini": GeminiBackend, "openrouter": OpenRouterBackend,
             "openai": OpenAIBackend, "local": LocalBackend}[backend](**kw)
+
+
+def test_backend(backend="openrouter", verbose=True, **kw):
+    """Gọi thử MỘT lần với 2 câu, in ra lỗi gốc đầy đủ nếu hỏng.
+
+    Chạy hàm này trước khi annotate — nó cho biết chính xác vấn đề nằm ở đâu
+    thay vì chỉ thấy 'không dùng được'.
+    """
+    batch = [("t1", "Cái clip này hay vc, xem xong feel good luôn"),
+             ("t2", "xia xìa nhé bạn hiền")]
+    try:
+        bk = make_backend(backend, **kw)
+    except Exception as e:
+        print(f"[LỖI khi khởi tạo] {type(e).__name__}: {e}")
+        return None
+    try:
+        raw = bk(build_user_prompt(batch))
+    except Exception as e:
+        print(f"[LỖI khi gọi] {type(e).__name__}")
+        print(f"{e}")
+        return None
+    if verbose:
+        print("--- output thô ---")
+        print(raw[:1200])
+    try:
+        parsed = _extract_json(raw)
+        print(f"\n[OK] parse được {len(parsed)} phần tử")
+        for o in parsed:
+            print(f"  has_cs={o.get('has_cs')} langs={o.get('langs')} "
+                  f"tokens={o.get('tokens')}")
+        return parsed
+    except Exception as e:
+        print(f"\n[LỖI parse] {type(e).__name__}: {e}")
+        return None
 
 
 # ---------------------------------------------------------------------------
