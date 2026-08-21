@@ -127,9 +127,41 @@ KHÔNG PHẢI CHUYỂN MÃ — tuyệt đối không liệt kê:
 - Tiếng Việt viết sai chính tả hoặc thiếu dấu: "khong", "duoc", "thich"
 - Từ tiếng Việt thuần dù nghe lạ
 
+BA LỖI NGHIÊM TRỌNG PHẢI TRÁNH:
+
+(A) Từ tiếng Việt KHÔNG DẤU bị nhầm là tiếng Anh.
+    "thi", "tan", "con", "ban", "cam", "tin", "sang", "hang", "long", "man",
+    "de", "vi", "co", "la", "ma", "may", "toi", "khong" — đây là TIẾNG VIỆT
+    viết thiếu dấu, KHÔNG phải tiếng Anh. Hãy đọc cả câu: nếu từ đó đọc lên
+    có nghĩa tiếng Việt trong ngữ cảnh, nó là tiếng Việt.
+    "con nay hon lao qua" -> KHÔNG có tiếng Anh nào.
+
+(B) Tên riêng tiếng Việt bị nhầm là tiếng Anh.
+    "Việt Nam", "Viet Nam", "Hà Nội", "Sài Gòn", "Nguyễn Văn A", "Thanh Hóa"
+    -> proper_noun, KHÔNG phải english.
+    Chữ viết hoa KHÔNG có nghĩa là tiếng Anh.
+
+(C) Từ HÁN-VIỆT bị nhầm là tiếng Trung. LỖI NÀY RẤT HAY GẶP.
+    Tiếng Việt có hàng nghìn từ gốc Hán đã là từ tiếng Việt hoàn chỉnh:
+    "tạ ơn", "cảm ơn", "quốc gia", "gia đình", "hạnh phúc", "tình yêu",
+    "nhân dân", "học sinh", "công ty", "đại học", "phụ nữ", "thiên hạ",
+    "giang hồ", "anh hùng", "tiểu thư", "đại ca", "sư phụ", "tỷ muội"
+    -> Đây là TIẾNG VIỆT, tuyệt đối KHÔNG phải chinese_translit.
+
+    Chỉ gán chinese_translit khi từ đó là PHIÊN ÂM ÂM ĐỌC TIẾNG PHỔ THÔNG
+    (pinyin) và KHÔNG có nghĩa tiếng Việt: "xia xìa" (xiexie), "nỉ hảo"
+    (nihao), "pà pà" (baba), "chia du" (jiayou), "ai ya", "wo ai ni".
+
+    KIỂM TRA BẮT BUỘC: nếu gán chinese_translit hoặc chinese_script, trường
+    "gloss" PHẢI chứa chữ Hán tương ứng. Không viết ra được chữ Hán nghĩa là
+    bạn đang đoán sai — hãy bỏ token đó đi.
+
 QUY TẮC:
 - Chỉ liệt kê token thực sự xuất hiện trong câu, giữ nguyên dạng gốc.
-- Nếu phân vân giữa tiếng Việt và phiên âm ngoại, hãy nghiêng về tiếng Việt và hạ confidence.
+- Token "english" phải viết bằng chữ Latin KHÔNG DẤU. Từ có dấu tiếng Việt
+  (á à ả ã ạ ă â ê ô ơ ư đ...) KHÔNG BAO GIỜ là tiếng Anh.
+- Khi phân vân, luôn nghiêng về TIẾNG VIỆT và hạ confidence. Thà bỏ sót còn
+  hơn gán nhầm.
 - confidence là số thực 0.0–1.0 cho toàn câu.
 
 ĐẦU RA: chỉ JSON hợp lệ, không giải thích, không markdown. Mảng có đúng số phần tử bằng số câu đầu vào, theo đúng thứ tự:
@@ -165,6 +197,15 @@ FEWSHOT = [
       "confidence": 0.9}),
     ("bức ảnh xuất sắc ❤️ haha",
      {"has_cs": False, "langs": [], "tokens": [], "confidence": 0.98}),
+    # --- ba ví dụ chống lỗi hay gặp ---
+    ("Tạ ơn vì có cái cớ, bằng chứng để ly dị cái loại rác rưởi nầy.",
+     {"has_cs": False, "langs": [], "tokens": [], "confidence": 0.95}),
+    ("chung toi la nguoi Viet Nam, con hieu hay khong thi ke",
+     {"has_cs": False, "langs": [],
+      "tokens": [{"text": "Viet Nam", "type": "proper_noun", "gloss": "tên quốc gia"}],
+      "confidence": 0.9}),
+    ("gia đình hạnh phúc, quốc gia thịnh vượng, thiên hạ thái bình",
+     {"has_cs": False, "langs": [], "tokens": [], "confidence": 0.97}),
 ]
 
 
