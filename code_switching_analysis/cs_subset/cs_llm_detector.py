@@ -419,6 +419,45 @@ def list_openrouter_models(api_key=None, free_only=True, query="", limit=40):
     return [x["id"] for x in rows]
 
 
+def check_openrouter_keys(keys, verbose=True):
+    """Kiểm tra từng key: còn sống không, còn bao nhiêu hạn mức.
+
+        good = L.check_openrouter_keys(OR_KEYS)
+    Chạy trước khi annotate để khỏi mất 5 phút mới biết key hỏng.
+    """
+    import requests
+    if isinstance(keys, str):
+        keys = [keys]
+    good = []
+    for i, k in enumerate(keys, 1):
+        k = (k or "").strip()
+        if not k:
+            if verbose:
+                print(f"  key #{i}: RỖNG")
+            continue
+        try:
+            r = requests.get("https://openrouter.ai/api/v1/auth/key",
+                             headers={"Authorization": f"Bearer {k}"}, timeout=20)
+            if r.status_code == 200:
+                d = (r.json() or {}).get("data", {}) or {}
+                lim, used = d.get("limit"), d.get("usage")
+                rem = "không giới hạn" if lim is None else f"còn {float(lim) - float(used or 0):.4f} USD"
+                if verbose:
+                    print(f"  key #{i} {k[:16]}... OK   | dùng {used} | {rem}"
+                          f" | free_tier={d.get('is_free_tier')}")
+                good.append(k)
+            else:
+                msg = r.text[:110].replace("\n", " ")
+                if verbose:
+                    print(f"  key #{i} {k[:16]}... HỎNG ({r.status_code}) {msg}")
+        except Exception as e:
+            if verbose:
+                print(f"  key #{i} {k[:16]}... LỖI MẠNG {type(e).__name__}")
+    if verbose:
+        print(f"\n{len(good)}/{len(keys)} key dùng được")
+    return good
+
+
 # Ưu tiên theo họ model: Qwen và DeepSeek mạnh tiếng Trung nhất, hợp với việc
 # phát hiện phiên âm Hán-Việt.
 OR_FAMILY_RANK = ["qwen", "deepseek", "glm", "minimax", "llama", "gemma",
@@ -537,6 +576,23 @@ class OpenRouterBackend:
                 return r.choices[0].message.content
             except Exception as e:
                 msg = str(e)
+
+                # 401 -> key chết (bị thu hồi, sai chuỗi, tài khoản đã xoá).
+                # Bỏ hẳn key đó rồi dùng key khác, đừng để một key hỏng giết cả lượt.
+                if "401" in msg or "User not found" in msg or "No auth credentials" in msg:
+                    if len(self.clients) > 1:
+                        print(f"    [key chết] bỏ key #{self.ki + 1}/{len(self.clients)}")
+                        self.clients.pop(self.ki)
+                        if getattr(self, "keys", None):
+                            self.keys.pop(self.ki)
+                        self.ki %= len(self.clients)
+                        self.client = self.clients[self.ki]
+                        continue
+                    raise RuntimeError(
+                        "Key OpenRouter không hợp lệ (401 User not found).\n"
+                        "  - key đã bị thu hồi? tạo key mới ở https://openrouter.ai/keys\n"
+                        "  - copy thiếu ký tự hoặc dính khoảng trắng / xuống dòng?\n"
+                        "  - kiểm tra nhanh: L.check_openrouter_keys(OR_KEYS)") from e
 
                 # 429 / quá tải. Với model :free dùng chung pool, XOAY VÒNG sang
                 # model khác hiệu quả hơn nhiều so với ngồi chờ một model.
