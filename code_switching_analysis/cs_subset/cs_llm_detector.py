@@ -446,7 +446,7 @@ def _fetch_openrouter(api_key=None):
     return out
 
 
-def _rank_openrouter(api_key=None, prefer_free=True, min_ctx=8000):
+def _rank_openrouter(api_key=None, prefer_free=True, min_ctx=8000, only_free=False):
     """Xếp hạng model OpenRouter theo mức phù hợp với tác vụ này.
 
     Lấy danh sách trực tiếp từ API thay vì dùng slug cứng — slug :free bị gỡ
@@ -474,8 +474,11 @@ def _rank_openrouter(api_key=None, prefer_free=True, min_ctx=8000):
     paid = sorted([m for m in cand if not m["free"]],
                   key=lambda m: (fam(m["id"]), -m["price"], m["ctx"]), reverse=True)
 
-    ids = ([m["id"] for m in free] + [m["id"] for m in paid]) if prefer_free \
-        else ([m["id"] for m in paid] + [m["id"] for m in free])
+    if only_free:
+        ids = [m["id"] for m in free]
+    else:
+        ids = ([m["id"] for m in free] + [m["id"] for m in paid]) if prefer_free \
+            else ([m["id"] for m in paid] + [m["id"] for m in free])
     print(f"[i] {len(free)} model miễn phí, {len(paid)} model trả phí phù hợp")
     return ids[:12]
 
@@ -488,7 +491,7 @@ class OpenRouterBackend:
 
     def __init__(self, api_key=None, model="auto", base_url="https://openrouter.ai/api/v1",
                  site="https://kaggle.com", title="ViGoEmotions-CS", json_mode=True,
-                 max_rate_retry=4):
+                 max_rate_retry=4, rotate=True, free_only=False):
         from openai import OpenAI
         key = api_key or os.environ.get("OPENROUTER_API_KEY")
         if not key:
@@ -497,9 +500,10 @@ class OpenRouterBackend:
         self.headers = {"HTTP-Referer": site, "X-Title": title}
         self.json_mode = json_mode
         self.max_rate_retry = max_rate_retry
+        self.rotate = rotate
 
         if model == "auto":
-            self.candidates = _rank_openrouter(key)
+            self.candidates = _rank_openrouter(key, only_free=free_only)
             print(f"[i] thứ tự thử: {self.candidates[:5]}")
         else:
             self.candidates = [model]
@@ -524,10 +528,29 @@ class OpenRouterBackend:
             except Exception as e:
                 msg = str(e)
 
-                # 429 / quá tải: chờ theo gợi ý của provider rồi thử lại.
-                # Quá số lần thì mới chuyển sang model khác.
+                # 429 / quá tải. Với model :free dùng chung pool, XOAY VÒNG sang
+                # model khác hiệu quả hơn nhiều so với ngồi chờ một model.
                 if _is_rate(msg) and not any(k in msg for k in ("404", "403")):
                     rate_hits += 1
+                    if self.rotate and len(self.candidates) > 1:
+                        self.candidates.append(self.candidates.pop(0))
+                        self.model = self.candidates[0]
+                        self._verified = False
+                        if rate_hits % len(self.candidates) == 0:
+                            w = _retry_after(msg)
+                            print(f"    [chờ] cả {len(self.candidates)} model đều bận, "
+                                  f"nghỉ {w:.0f}s")
+                            time.sleep(w)
+                        else:
+                            print(f"    [xoay] quá tải -> đổi sang {self.model}")
+                        if rate_hits > self.max_rate_retry * max(len(self.candidates), 1):
+                            raise RuntimeError(
+                                "Mọi model miễn phí đều quá tải liên tục.\n"
+                                "  - nạp một khoản nhỏ vào OpenRouter để nâng hạn mức, hoặc\n"
+                                "  - dùng model trả phí: model='qwen/qwen-2.5-72b-instruct'\n"
+                                "    (~0.3 USD cho 4133 câu), hoặc\n"
+                                "  - chạy local: backend='local'") from e
+                        continue
                     if rate_hits <= self.max_rate_retry:
                         w = _retry_after(msg) * rate_hits
                         print(f"    [chờ] {self.model} quá tải, nghỉ {w:.0f}s "

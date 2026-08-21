@@ -40,6 +40,86 @@ SPLITS = ("val", "test")            # chỉ gán nhãn LLM cho hai split này
 SCENARIOS = ("s1", "s2", "s3")      # ba phiên bản tiền xử lý
 CANONICAL = "raw"                   # văn bản dùng để phát hiện code-mixed
 
+# Khai báo LLM một lần, dùng cho cả test_llm() và detect().
+#     D.BACKEND = "openrouter"
+#     D.BACKEND_KW = dict(api_key=OR_KEY, model="qwen/qwen-2.5-72b-instruct")
+BACKEND = "openrouter"
+BACKEND_KW = {}
+
+# Các cấu hình LLM dựng sẵn. Đổi bằng một dòng:  D.use("local_7b", ...)
+PRESETS = {
+    # --- chạy trên GPU Kaggle, không cần API key ---
+    "local_7b": dict(
+        backend="local", model="Qwen/Qwen2.5-7B-Instruct", batch_size=8,
+        _note="Miễn phí, tái lập được. Cần GPU + bitsandbytes. ~2–3 giờ."),
+    "local_3b": dict(
+        backend="local", model="Qwen/Qwen2.5-3B-Instruct", batch_size=12,
+        _note="Nhẹ hơn, chạy được không cần 4-bit. Yếu hơn ở phần phiên âm. ~1 giờ."),
+    "local_14b": dict(
+        backend="local", model="Qwen/Qwen2.5-14B-Instruct", batch_size=6,
+        _note="Chất lượng cao nhất trong nhóm local. Cần 4-bit + GPU ≥16GB. ~4 giờ."),
+
+    # --- qua API ---
+    "openrouter_paid": dict(
+        backend="openrouter", model="qwen/qwen-2.5-72b-instruct", batch_size=15,
+        _note="Nhanh nhất, chất lượng cao nhất. ~0.3 USD cho 4133 câu. ~20–40 phút."),
+    "openrouter_free": dict(
+        backend="openrouter", model="auto", free_only=True, batch_size=20,
+        sleep=2, _note="Miễn phí nhưng bị giới hạn tốc độ, tự xoay vòng model."),
+    "openrouter_deepseek": dict(
+        backend="openrouter", model="deepseek/deepseek-chat", batch_size=15,
+        _note="Rẻ hơn Qwen 72B, tiếng Trung vẫn tốt."),
+    "gemini": dict(
+        backend="gemini", model="auto", batch_size=15,
+        _note="Cùng họ mô hình mà nhóm tác giả dùng để gán nhãn dataset."),
+}
+
+
+def use(preset, api_key=None, **override):
+    """Chọn cấu hình LLM.
+
+        D.use("local_7b")
+        D.use("openrouter_paid", api_key=OR_KEY)
+        D.use("openrouter_free", api_key=OR_KEY, batch_size=25)
+    """
+    global BACKEND, BACKEND_KW
+    if preset not in PRESETS:
+        raise ValueError(f"Không có preset {preset!r}. Có: {list(PRESETS)}")
+    cfg = {k: v for k, v in PRESETS[preset].items() if not k.startswith("_")}
+    BACKEND = cfg.pop("backend")
+    if api_key:
+        cfg["api_key"] = api_key
+    BACKEND_KW = {**cfg, **override}
+    shown = {k: (str(v)[:12] + "..." if k == "api_key" else v)
+             for k, v in BACKEND_KW.items()}
+    _p(f"[i] preset '{preset}' -> backend={BACKEND}")
+    _p(f"    {PRESETS[preset]['_note']}")
+    _p(f"    tham số: {shown}")
+    return BACKEND, BACKEND_KW
+
+
+def presets():
+    """Bảng so sánh các lựa chọn."""
+    rows = []
+    for name, c in PRESETS.items():
+        rows.append({"preset": name, "backend": c["backend"],
+                     "model": c.get("model", ""),
+                     "batch": c.get("batch_size", ""),
+                     "ghi_chú": c["_note"]})
+    t = pd.DataFrame(rows)
+    with pd.option_context("display.max_colwidth", 70, "display.width", 200):
+        _p(t.to_string(index=False))
+    return t
+
+
+def batch_for(preset=None):
+    """batch_size khuyến nghị của preset đang dùng."""
+    for name, c in PRESETS.items():
+        if preset == name or (preset is None and c["backend"] == BACKEND
+                              and c.get("model") == BACKEND_KW.get("model")):
+            return c.get("batch_size", 15)
+    return 15
+
 _prepared = None                    # df sau bước prepare()
 _built = None                       # df sau bước build()
 
@@ -109,14 +189,20 @@ def load_prepared(path=None):
 
 
 # ---------------------------------------------------------------- 2. LLM
-def test_llm(backend="local", **kw):
+_NOT_BACKEND = ("batch_size", "sleep")     # tham số của annotate(), không phải backend
+
+
+def test_llm(backend=None, **kw):
     """Gọi thử 2 câu, in output thô + lỗi gốc. Chạy trước detect()."""
     import cs_llm_detector as E
-    return E.test_backend(backend, **kw)
+    merged = {k: v for k, v in {**BACKEND_KW, **kw}.items() if k not in _NOT_BACKEND}
+    return E.test_backend(backend or BACKEND, **merged)
 
 
-def list_models(backend="openrouter", api_key=None, **kw):
+def list_models(backend=None, api_key=None, **kw):
     import cs_llm_detector as E
+    backend = backend or BACKEND
+    api_key = api_key or BACKEND_KW.get("api_key")
     if backend == "openrouter":
         return E.list_openrouter_models(api_key, **kw)
     if backend == "gemini":
@@ -124,16 +210,33 @@ def list_models(backend="openrouter", api_key=None, **kw):
     _p("backend 'local' không có danh sách — chọn model trên Hugging Face")
 
 
-def detect(df=None, backend="local", cache=None, splits=None, tag=None,
-           batch_size=8, sleep=0.0, limit=None, **backend_kw):
+def detect(df=None, backend=None, cache=None, splits=None, tag=None,
+           batch_size=15, sleep=0.0, limit=None, **backend_kw):
     """Gán nhãn code-mixed bằng LLM. Ghi cache theo dòng, chạy lại không mất công."""
     import cs_llm_detector as E
     d = df if df is not None else _prepared
     if d is None:
         raise RuntimeError("Chưa có dữ liệu — chạy prepare() hoặc load_prepared() trước.")
-    return E.annotate(d, backend=backend, cache=cache or CACHE,
+    bk = backend or BACKEND
+    kw = {**BACKEND_KW, **backend_kw}
+    # các tham số này của annotate(), không phải của backend
+    batch_size = kw.pop("batch_size", batch_size)
+    sleep = kw.pop("sleep", sleep)
+
+    # tag mặc định gồm cả tên model -> chạy nhiều model không trộn cache lẫn nhau
+    if tag is None:
+        m = str(kw.get("model", "")).split("/")[-1].replace(":free", "")
+        tag = f"{bk}:{m}" if m and m != "auto" else bk
+    _p(f"[i] backend={bk} tag={tag} batch={batch_size}")
+    return E.annotate(d, backend=bk, cache=cache or CACHE,
                       splits=splits or SPLITS, batch_size=batch_size,
-                      sleep=sleep, limit=limit, tag=tag or backend, **backend_kw)
+                      sleep=sleep, limit=limit, tag=tag, **kw)
+
+
+def default_tag(backend=None, model=None):
+    bk = backend or BACKEND
+    m = str(model or BACKEND_KW.get("model", "")).split("/")[-1].replace(":free", "")
+    return f"{bk}:{m}" if m and m != "auto" else bk
 
 
 def cache_status(cache=None, splits=None):
