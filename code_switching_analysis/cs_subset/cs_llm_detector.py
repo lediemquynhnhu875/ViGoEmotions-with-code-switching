@@ -496,14 +496,24 @@ class OpenRouterBackend:
         key = api_key or os.environ.get("OPENROUTER_API_KEY")
         if not key:
             raise ValueError("Thiếu OpenRouter key. Lấy ở https://openrouter.ai/keys")
-        self.client = OpenAI(api_key=key, base_url=base_url)
+
+        # api_key nhận str hoặc list[str]. Nhiều key -> xoay vòng khi gặp 429,
+        # thử key khác trước rồi mới đổi model.
+        keys = [key] if isinstance(key, str) else [k for k in key if k]
+        self.keys = keys
+        self.clients = [OpenAI(api_key=k, base_url=base_url) for k in keys]
+        self.ki = 0
+        self.client = self.clients[0]
+        if len(keys) > 1:
+            print(f"[i] {len(keys)} key, sẽ xoay vòng khi gặp giới hạn")
+        key = keys[0]
         self.headers = {"HTTP-Referer": site, "X-Title": title}
         self.json_mode = json_mode
         self.max_rate_retry = max_rate_retry
         self.rotate = rotate
 
         if model == "auto":
-            self.candidates = _rank_openrouter(key, only_free=free_only)
+            self.candidates = _rank_openrouter(keys[0], only_free=free_only)
             print(f"[i] thứ tự thử: {self.candidates[:5]}")
         else:
             self.candidates = [model]
@@ -532,6 +542,13 @@ class OpenRouterBackend:
                 # model khác hiệu quả hơn nhiều so với ngồi chờ một model.
                 if _is_rate(msg) and not any(k in msg for k in ("404", "403")):
                     rate_hits += 1
+                    # 1) còn key khác -> đổi key, rẻ nhất
+                    if len(self.clients) > 1 and rate_hits % len(self.clients) != 0:
+                        self.ki = (self.ki + 1) % len(self.clients)
+                        self.client = self.clients[self.ki]
+                        print(f"    [đổi key] key #{self.ki + 1}/{len(self.clients)}")
+                        continue
+                    # 2) hết key -> đổi model
                     if self.rotate and len(self.candidates) > 1:
                         self.candidates.append(self.candidates.pop(0))
                         self.model = self.candidates[0]
