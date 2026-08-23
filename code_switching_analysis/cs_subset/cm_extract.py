@@ -91,6 +91,107 @@ def mask(df, name):
 
 
 # ---------------------------------------------------------------------------
+# Soi dữ liệu trước khi chạy
+# ---------------------------------------------------------------------------
+TABLE_EXTS = {".csv", ".tsv", ".xlsx", ".xls", ".parquet", ".json", ".jsonl",
+              ".pkl", ".pickle"}
+
+
+def list_input(root="/kaggle/input", max_depth=3, max_files=60):
+    """Liệt kê dataset đang Add Input, để lấy đúng đường dẫn mà không phải đoán."""
+    root = Path(root)
+    if not root.exists():
+        _p(f"[!] không có {root} — bạn đang chạy ngoài Kaggle?")
+        return []
+    rows = []
+    for p in sorted(root.rglob("*")):
+        depth = len(p.relative_to(root).parts)
+        if depth > max_depth:
+            continue
+        if p.is_file():
+            rows.append({"đường dẫn": str(p),
+                         "MB": round(p.stat().st_size / 1e6, 2),
+                         "đọc được": p.suffix.lower() in TABLE_EXTS})
+        if len(rows) >= max_files:
+            break
+    if not rows:
+        _p(f"[!] {root} rỗng — chưa Add Input dataset nào.")
+        return []
+    t = pd.DataFrame(rows)
+    with pd.option_context("display.max_colwidth", 100, "display.width", 200):
+        _p(t.to_string(index=False))
+    dirs = sorted({str(Path(r).parent) for r in t[t["đọc được"]]["đường dẫn"]})
+    if dirs:
+        _p("\nThư mục có file dữ liệu đọc được — truyền một trong số này làm RAW_DATA:")
+        for d in dirs:
+            _p(f"    {d}")
+    return t
+
+
+def peek(data_path, n=5, text_col="text", label_col="labels", split_col="split"):
+    """Đọc thử dữ liệu thô và in cấu trúc, TRƯỚC khi chạy extract().
+
+    Cho biết ngay: có nhận ra cột text/labels/split không, nhãn đang ở dạng gì,
+    split đặt tên thế nào. Sai ở đây thì mọi thứ phía sau sai theo.
+    """
+    from extract_cs_subset import _normalize_split, load_from_file, parse_label_list
+
+    _p(f"đọc: {data_path}\n")
+    p = Path(data_path)
+    if p.is_dir():
+        files = [f for f in sorted(p.rglob("*"))
+                 if f.is_file() and f.suffix.lower() in TABLE_EXTS]
+        _p(f"{len(files)} file dữ liệu trong thư mục:")
+        for f in files[:20]:
+            _p(f"    {f.name:44s} {f.stat().st_size/1e6:8.2f} MB")
+        _p("")
+
+    df = load_from_file(str(data_path))
+    for src, dst in ((text_col, "text"), (label_col, "labels"), (split_col, "split")):
+        if src != dst and src in df.columns:
+            df = df.rename(columns={src: dst})
+
+    _p(f"kích thước : {df.shape[0]} dòng × {df.shape[1]} cột")
+    _p(f"cột        : {list(df.columns)}\n")
+
+    for need, why in [("text", "văn bản đầu vào"),
+                      ("labels", "nhãn cảm xúc"),
+                      ("split", "chia train/val/test")]:
+        if need in df.columns:
+            _p(f"  [OK]  '{need}' ({why})")
+        else:
+            _p(f"  [!]   THIẾU '{need}' ({why}) -> truyền {need}_col='<tên cột thật>'")
+
+    if "split" in df.columns:
+        raw_counts = df["split"].value_counts().to_dict()
+        norm = df["split"].map(_normalize_split).value_counts().to_dict()
+        _p(f"\nsplit gốc      : {raw_counts}")
+        _p(f"sau chuẩn hoá  : {norm}   (validation/valid/dev -> val)")
+        if not {"val", "test"} & set(norm):
+            _p("  [!] không có val/test sau chuẩn hoá — kiểm tra lại cột split")
+
+    if "labels" in df.columns:
+        _p(f"\nnhãn thô (3 dòng đầu): {df['labels'].head(3).tolist()}")
+        ids = df["labels"].head(200).apply(parse_label_list)
+        _p(f"sau khi bóc tách     : {ids.head(3).tolist()}")
+        empty = int((ids.apply(len) == 0).sum())
+        if empty > len(ids) * 0.1:
+            _p(f"  [!] {empty}/{len(ids)} dòng đầu bóc ra rỗng — dạng nhãn có thể "
+               f"chưa được hỗ trợ, xem parse_label_list trong extract_cs_subset.py")
+        else:
+            _p(f"  [OK] trung bình {ids.apply(len).mean():.2f} nhãn/câu")
+
+    if "text" in df.columns:
+        _p(f"\n{n} câu đầu:")
+        for t in df["text"].head(n):
+            _p(f"    {str(t)[:110]}")
+        na = int(df["text"].isna().sum())
+        if na:
+            _p(f"  [!] {na} dòng text rỗng, sẽ bị loại khi chạy extract()")
+    return df
+
+
+# ---------------------------------------------------------------------------
 # Bước chính
 # ---------------------------------------------------------------------------
 def extract(data_path, out_dir="./cm_subsets", scenarios=(), canonical="raw",
