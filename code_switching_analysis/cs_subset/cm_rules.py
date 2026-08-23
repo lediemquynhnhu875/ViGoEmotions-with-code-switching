@@ -670,7 +670,7 @@ ZH_LEXICON: List[Tuple[str, str, str, str]] = [
     ("没关系", "mei guan xi", "không sao", "safe"),
     ("不好意思", "bu hao yi si", "ngại quá", "safe"),
     ("我爱你", "wo ai ni", "anh yêu em", "safe"),
-    ("爱你", "ai ni", "yêu em", "safe"),
+    ("爱你", "ai ni", "yêu em", "collide"),
     ("想你", "xiang ni", "nhớ em", "safe"),
     ("我喜欢你", "wo xi huan ni", "tôi thích bạn", "safe"),
     ("喜欢", "xi huan", "thích", "safe"),
@@ -683,7 +683,7 @@ ZH_LEXICON: List[Tuple[str, str, str, str]] = [
     ("辛苦了", "xin ku le", "vất vả rồi", "safe"),
     ("太好了", "tai hao le", "tốt quá", "safe"),
     ("很好", "hen hao", "rất tốt", "safe"),
-    ("好的", "hao de", "được thôi", "safe"),
+    ("好的", "hao de", "được thôi", "collide"),
     ("是的", "shi de", "đúng vậy", "safe"),
     ("真的", "zhen de", "thật à", "safe"),
     ("什么", "shen me", "cái gì", "safe"),
@@ -703,9 +703,9 @@ ZH_LEXICON: List[Tuple[str, str, str, str]] = [
     ("帅哥", "shuai ge", "anh đẹp trai", "safe"),
     ("小姐姐", "xiao jie jie", "chị xinh", "safe"),
     ("姐姐", "jie jie", "chị", "safe"),
-    ("弟弟", "di di", "em trai", "safe"),
+    ("弟弟", "di di", "em trai", "collide"),
     ("妹妹", "mei mei", "em gái", "safe"),
-    ("奶奶", "nai nai", "bà", "safe"),
+    ("奶奶", "nai nai", "bà", "collide"),
     ("爷爷", "ye ye", "ông", "safe"),
     ("阿姨", "a yi", "dì", "safe"),
     ("叔叔", "shu shu", "chú", "safe"),
@@ -720,7 +720,7 @@ ZH_LEXICON: List[Tuple[str, str, str, str]] = [
     ("奥利给", "ao li gei", "cố lên", "safe"),
     ("绝绝子", "jue jue zi", "tuyệt đỉnh", "safe"),
     ("真香", "zhen xiang", "thơm thật", "safe"),
-    ("好吃", "hao chi", "ngon", "safe"),
+    ("好吃", "hao chi", "ngon", "collide"),
     ("好看", "hao kan", "đẹp", "safe"),
     ("太棒了", "tai bang le", "tuyệt quá", "safe"),
     ("乖乖", "guai guai", "ngoan", "safe"),
@@ -747,13 +747,15 @@ ZH_LEXICON: List[Tuple[str, str, str, str]] = [
 # thường gặp, nhưng cụm "chia du" thì không phải tiếng Việt).
 ZH_SURFACES: Dict[str, List[str]] = {
     "加油": ["chia du", "cha du", "gia du", "chia dau", "jia you", "chia dzu"],
-    "谢谢": ["xia xia", "xie xie", "sia sia", "xe xe"],
+    # "xe xe" và "che che" CỐ Ý không khai báo: "xe", "che" là từ tiếng Việt
+    # thường gặp, khai báo vào là mở lại đúng lớp lỗi kiểu "ủa sao".
+    "谢谢": ["xia xia", "xie xie", "sia sia"],
     "你好": ["ni hao", "nhi hao"],
     "我爱你": ["wo ai ni", "ua ai ni"],
     "爸爸": ["pa pa", "ba ba"],
     "妈妈": ["ma ma"],
     "哥哥": ["cua cua", "ke ke", "ge ge"],
-    "姐姐": ["chie chie", "jie jie", "che che"],
+    "姐姐": ["chie chie", "jie jie"],
     "再见": ["chai chien", "zai jian"],
     "对不起": ["tui bu chi", "dui bu qi"],
     "哎呀": ["ai da", "ai ya"],
@@ -780,6 +782,7 @@ sức khỏe bệnh tật cuộc sống cuộc đời số phận định mệnh
 cảm ơn tạ ơn xin lỗi cáo lỗi chúc mừng chào hỏi
 đồng học đồng chí đồng hương đồng nghiệp
 cô nương công phu võ lâm minh chủ chưởng môn
+đi đi ra đi đi ngủ đi về đi thôi
 """.strip()
 # Ghi chú: "ba ba", "ma ma", "ca ca" CỐ Ý không nằm ở đây. Chúng đã được đánh
 # risk="collide" trong ZH_LEXICON nên chỉ được nhận khi câu có bằng chứng tiếng
@@ -1200,8 +1203,9 @@ class CodeMixDetector:
         """Tầng 2: phiên âm tiếng Trung viết bằng chữ Việt.
 
         Khớp theo khung âm vị với từ điển chữ Hán. Ba lớp chặn, theo thứ tự:
-          1. Chuỗi nằm trong HAN_VIET_STOP  -> loại thẳng (đây là tiếng Việt).
-          2. Mọi âm tiết đều là từ tiếng Việt thông dụng -> cần bằng chứng thêm.
+          1. Chuỗi nằm trong HAN_VIET_STOP -> loại thẳng (đây là tiếng Việt).
+          2. Mọi âm tiết đều là âm tiết tiếng Việt HỢP LỆ -> chỉ nhận nếu bề mặt
+             đã khai báo tường minh trong ZH_SURFACES.
           3. Mục 'collide' -> chỉ nhận khi câu có bằng chứng tiếng Trung khác.
         """
         found_safe = False
@@ -1233,20 +1237,24 @@ class CodeMixDetector:
                 if entry is None:
                     continue
 
-                # Cụm mà MỌI âm tiết đều là từ tiếng Việt rất thông dụng thì rất
-                # dễ là tiếng Việt thật, không phải phiên âm. Chỉ nhận khi bề mặt
-                # đã được khai báo tường minh, hoặc câu có bằng chứng Hoa khác.
-                if explicit:
-                    all_common = False
-                elif HAS_WORDFREQ:
-                    all_common = all(zipf(t.lower(), "vi") >= 4.3 and is_vi_syllable(t)
-                                     for t in toks)
-                else:
-                    # Không có wordfreq thì không đo được "thông dụng". Lùi về luật
-                    # chặt hơn: phải có ít nhất một âm tiết KHÔNG hợp lệ trong tiếng
-                    # Việt (xia, wo, xie) thì mới nhận qua khung âm vị.
-                    all_common = all(is_vi_syllable(t) for t in toks)
-                if entry["risk"] == "collide" or all_common:
+                # LUẬT CHẶN CHÍNH.
+                # Cụm mà MỌI âm tiết đều là âm tiết tiếng Việt hợp lệ thì không
+                # thể phân biệt phiên âm với tiếng Việt thật bằng hình thức được
+                # nữa — chỉ ngữ nghĩa mới phân biệt nổi. Những cụm như vậy chỉ
+                # được nhận khi bề mặt đã KHAI BÁO TƯỜNG MINH trong ZH_SURFACES.
+                #
+                # Đây là bài học từ "ủa sao": khung âm vị khớp 卧槽 (wo cao) vì
+                # "ủa" không có phụ âm đầu nên khớp w-, còn sao/cao thì khớp thật.
+                # Chặn theo tần suất không cứu được vì "ủa" hiếm trong corpus.
+                #
+                # Khớp tự động vẫn giữ nguyên tác dụng cho pinyin viết bằng chữ
+                # Latin (xie xie, zai jian, dui bu qi, shen me, wo ai ni...) —
+                # phần lớn âm tiết pinyin KHÔNG phải âm tiết tiếng Việt hợp lệ,
+                # nên chúng vượt qua luật này mà không cần khai báo.
+                needs_decl = (not explicit) and all(is_vi_syllable(t) for t in toks)
+                if needs_decl:
+                    continue
+                if entry["risk"] == "collide":
                     if not (self.allow_zh_collide and (has_han or found_safe)):
                         continue
                     ev, conf = ("zh_translit_support",
@@ -1788,6 +1796,18 @@ TEST_CASES: List[Tuple[str, bool, List[str]]] = [
     # --- dương tính: ngôn ngữ khác ---
     ("sa rang he oppa của em", True, ["other"]),
 
+    # --- âm tính: tiếng Việt trùng khung âm vị tiếng Trung ---
+    # Đây là lớp lỗi riêng của tầng phiên âm: "ủa sao" khớp khung 卧槽 (wo cao),
+    # "ba ba" khớp 爸爸. Chỉ hình thức thì không phân biệt nổi.
+    ("ủa sao quốc ca sớm vậy", False, []),
+    ("ủa sao kỳ vậy trời", False, []),
+    ("thôi đi đi cho rồi, ở lại làm gì", False, []),
+    ("ai ni cũng làm được mà, có gì đâu", False, []),
+    ("ba ba của mình nuôi con ba ba", False, []),
+    ("hai mai ta lai đây chơi nhé", False, []),
+    ("ca sĩ này hát hay quá đi mất", False, []),
+    ("nay lai rai với anh em cho vui", False, []),
+
     # --- âm tính: từ tiếng Việt viết không dấu (lỗi A của LLM) ---
     ("con nay hon lao qua", False, []),
     ("chung toi la nguoi Viet Nam, con hieu hay khong thi ke", False, []),
@@ -1886,6 +1906,36 @@ def compare_with_cs_detector(df, text_col: str = "text", n_show: int = 12):
               f"(chữ Hán, phiên âm, cụm nhiều từ) ---")
         print(only_new[["text", "token_moi", "bang_chung"]].head(n_show).to_string(index=False))
     return m
+
+
+def audit_zh_surfaces(show_all: bool = False):
+    """Kiểm kê các bề mặt phiên âm dễ trùng tiếng Việt.
+
+    Bề mặt mà MỌI âm tiết đều là âm tiết tiếng Việt hợp lệ là nguồn false
+    positive duy nhất còn lại của tầng phiên âm (khớp tự động đã bị chặn ở
+    những chuỗi như vậy, chỉ bề mặt khai báo tay mới lọt). Chạy hàm này mỗi
+    khi thêm mục vào ZH_SURFACES.
+    """
+    rows = []
+    for surface, entry in sorted(ZH_SURFACE_INDEX.items()):
+        toks = surface.split()
+        all_vi = all(is_vi_syllable(t) for t in toks)
+        fvi = [round(zipf(t, "vi"), 2) for t in toks]
+        rows.append({"bề mặt": surface, "Hán": entry["han"], "risk": entry["risk"],
+                     "toàn âm tiết Việt": all_vi, "zipf_vi": fvi,
+                     "cần hỗ trợ": entry["risk"] == "collide"})
+    t = pd.DataFrame(rows)
+    risky = t[t["toàn âm tiết Việt"] & ~t["cần hỗ trợ"]]
+    with pd.option_context("display.width", 200, "display.max_colwidth", 40):
+        print(f"=== {len(risky)}/{len(t)} bề mặt toàn âm tiết Việt và KHÔNG cần "
+              f"bằng chứng hỗ trợ ===")
+        print("(soi kỹ: mỗi dòng ở đây là một cụm mà bộ luật sẽ nhận ngay cả khi "
+              "câu không có chữ Hán)")
+        print(risky.to_string(index=False) if len(risky) else "  không có")
+        if show_all:
+            print("\n=== toàn bộ ===")
+            print(t.to_string(index=False))
+    return t
 
 
 def demo() -> None:
