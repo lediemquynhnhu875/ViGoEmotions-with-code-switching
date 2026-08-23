@@ -455,6 +455,81 @@ def write_stats(df, out_dir):
     _p(f"\n      [stats] {s}")
 
 
+def zip_output(out_dir="/kaggle/working/cm_subsets", what="all",
+               zip_path=None, link=True):
+    """Nén kết quả thành .zip và hiện link tải ngay trong notebook.
+
+    what : "all"          — toàn bộ (annotations + subsets + stats + review)
+           "annotations"  — chỉ annotations.csv, file duy nhất cần cho bước sau
+           "subsets"      — chỉ thư mục subsets/
+           "review"       — chỉ review_sample.csv để chấm tay
+           "light"        — annotations + stats + review, bỏ subsets/ (nhẹ nhất)
+
+    Zip luôn ghi vào /kaggle/working để vừa bấm link tải được, vừa hiện trong
+    tab Output khi bạn Save Version.
+    """
+    import os
+    import zipfile
+
+    out_dir = Path(out_dir)
+    if not out_dir.exists():
+        _p(f"[!] không có {out_dir} — chạy extract() trước.")
+        return None
+
+    picks = {
+        "all":         ["annotations", "subsets", "stats", "review_sample.csv",
+                        "subset_index.csv", "run_config.json"],
+        "light":       ["annotations", "stats", "review_sample.csv",
+                        "subset_index.csv", "run_config.json"],
+        "annotations": ["annotations"],
+        "subsets":     ["subsets", "subset_index.csv"],
+        "review":      ["review_sample.csv"],
+    }
+    if what not in picks:
+        raise ValueError(f"what phải là một trong {list(picks)}")
+
+    root = Path("/kaggle/working")
+    if not root.exists():                       # chạy ngoài Kaggle
+        root = out_dir.parent
+    name = f"{out_dir.name}_{what}.zip" if what != "all" else f"{out_dir.name}.zip"
+    zip_path = Path(zip_path) if zip_path else root / name
+
+    files = []
+    for item in picks[what]:
+        p = out_dir / item
+        if p.is_file():
+            files.append(p)
+        elif p.is_dir():
+            files += [f for f in p.rglob("*") if f.is_file()]
+    if not files:
+        _p(f"[!] không có file nào khớp what={what!r} trong {out_dir}")
+        return None
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in files:
+            z.write(f, arcname=str(f.relative_to(out_dir)))
+    mb = zip_path.stat().st_size / 1e6
+    _p(f"[OK] {len(files)} file -> {zip_path}  ({mb:.2f} MB)")
+
+    if link:
+        try:
+            from IPython.display import FileLink, display
+            # FileLink kiểm tra sự tồn tại theo thư mục làm việc hiện tại, mà
+            # notebook thường đã %cd sang thư mục repo -> tạm nhảy về rồi quay lại.
+            cwd = os.getcwd()
+            try:
+                os.chdir(zip_path.parent)
+                _p("Bấm vào link dưới để tải:")
+                display(FileLink(zip_path.name))
+            finally:
+                os.chdir(cwd)
+        except ImportError:
+            pass
+        _p(f"\nKhông thấy link? Bấm Save Version rồi lấy ở tab Output, "
+           f"hoặc mở panel Data > /kaggle/working/{zip_path.name}")
+    return zip_path
+
+
 def sample_sizes(df, splits=("train", "val", "test")):
     """In lại bảng cỡ mẫu từ một DataFrame đã có nhãn."""
     rows = []
