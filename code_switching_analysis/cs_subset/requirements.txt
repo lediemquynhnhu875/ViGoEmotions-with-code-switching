@@ -9,4 +9,6 @@ openpyxl>=3.1          # đọc .xlsx
 
 # chỉ cần cho eval_on_subsets.py
 torch>=2.0
-transformers>=4.35
+transformers>=4.51     # Qwen3 support + enable_thinking=False
+accelerate>=0.26       # device_map="auto" cho LLM local
+bitsandbytes>=0.43     # lượng tử 4-bit trên GPU Kaggle

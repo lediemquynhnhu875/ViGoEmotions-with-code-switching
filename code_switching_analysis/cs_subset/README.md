@@ -20,6 +20,32 @@ pip install -r requirements.txt
 
 ## Quickstart
 
+### Dùng LLM local (không cần API key)
+
+Khuyến nghị `Qwen/Qwen3-8B` ở chế độ 4-bit trên GPU Kaggle. Kiểm tra model,
+chạy thử 100 câu, rồi bỏ `--limit` để xử lý toàn bộ:
+
+```bash
+pip install -r requirements.txt
+python run_llm_detection.py \
+  --data-path /kaggle/input/vigoemotions \
+  --out-dir /kaggle/working/cm_qwen3 \
+  --test-only
+
+python run_llm_detection.py \
+  --data-path /kaggle/input/vigoemotions \
+  --out-dir /kaggle/working/cm_qwen3 \
+  --limit 100
+
+python run_llm_detection.py \
+  --data-path /kaggle/input/vigoemotions \
+  --out-dir /kaggle/working/cm_qwen3
+```
+
+Kết quả chính nằm ở `cm_qwen3/annotations/annotations.csv`. Cache JSONL được
+ghi sau mỗi batch, nên chạy lại cùng lệnh sẽ tiếp tục phần còn thiếu. Nếu GPU
+không đủ bộ nhớ, dùng `--model Qwen/Qwen3-4B`.
+
 ```bash
 # 1. Trích xuất subset (từ Hugging Face — cần huggingface-cli login vì dataset gated)
 python extract_cs_subset.py --source hf --hf-name uitnlp/vigoemotions --out-dir ./cs_subsets

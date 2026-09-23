@@ -49,6 +49,12 @@ BACKEND_KW = {}
 # Các cấu hình LLM dựng sẵn. Đổi bằng một dòng:  D.use("local_7b", ...)
 PRESETS = {
     # --- chạy trên GPU Kaggle, không cần API key ---
+    "local_qwen3_8b": dict(
+        backend="local", model="Qwen/Qwen3-8B", batch_size=8,
+        _note="Khuyến nghị: đa ngôn ngữ Việt-Anh-Trung, 4-bit trên GPU T4/P100."),
+    "local_qwen3_4b": dict(
+        backend="local", model="Qwen/Qwen3-4B", batch_size=10,
+        _note="Nhẹ hơn cho GPU ít VRAM; nên kiểm tra tay kỹ hơn bản 8B."),
     "local_7b": dict(
         backend="local", model="Qwen/Qwen2.5-7B-Instruct", batch_size=8,
         _note="Miễn phí, tái lập được. Cần GPU + bitsandbytes. ~2–3 giờ."),

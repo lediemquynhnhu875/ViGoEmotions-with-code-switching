@@ -33,7 +33,7 @@ Chọn LLM
 * `gemini`  — Gemini 2.5 Flash. **Khuyến nghị.** Chính nhóm tác giả ViGoEmotions
   dùng Gemini Flash để gán nhãn cảm xúc, nên dùng lại cùng họ mô hình là một
   lập luận nhất quán khi viết luận văn. Có gói miễn phí. Cần API key.
-* `local`   — Qwen2.5-7B-Instruct chạy trên GPU Kaggle. Không cần key, không
+* `local`   — Qwen3-8B chạy trên GPU Kaggle. Không cần key, không
   phụ thuộc mạng, tái lập được hoàn toàn. Qwen mạnh tiếng Trung nên hợp với
   yêu cầu phát hiện chữ Hán và phiên âm Hán-Việt.
 * `openai`  — bất kỳ endpoint tương thích OpenAI.
@@ -690,11 +690,12 @@ class LocalBackend:
       * transformers mới đổi `torch_dtype` thành `dtype` -> thử cả hai
     """
 
-    SMALLER = {"Qwen/Qwen2.5-7B-Instruct": "Qwen/Qwen2.5-3B-Instruct",
+    SMALLER = {"Qwen/Qwen3-8B": "Qwen/Qwen3-4B",
+               "Qwen/Qwen2.5-7B-Instruct": "Qwen/Qwen2.5-3B-Instruct",
                "Qwen/Qwen2.5-14B-Instruct": "Qwen/Qwen2.5-7B-Instruct"}
 
-    def __init__(self, model="Qwen/Qwen2.5-7B-Instruct", max_new_tokens=2048,
-                 load_in_4bit=True, dtype=None):
+    def __init__(self, model="Qwen/Qwen3-8B", max_new_tokens=2048,
+                 load_in_4bit=True, dtype=None, max_input_length=8192):
         import importlib.util
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -740,18 +741,59 @@ class LocalBackend:
         self.model = self.model.eval()
         self.model_name = model
         self.max_new_tokens = max_new_tokens
+        self.max_input_length = max_input_length
         print(f"[i] sẵn sàng: {model}")
 
     def __call__(self, user_prompt):
         import torch
+        # Tắt reasoning dài của Qwen3 để sinh JSON nhanh và ổn định hơn.
         msgs = [{"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}]
-        text = self.tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-        enc = self.tok([text], return_tensors="pt").to(self.model.device)
+                {"role": "user", "content": user_prompt + "\n/no_think"}]
+        template_kw = dict(tokenize=False, add_generation_prompt=True)
+        try:
+            text = self.tok.apply_chat_template(msgs, enable_thinking=False,
+                                                **template_kw)
+        except TypeError:                    # Qwen2.5 / transformers cũ
+            text = self.tok.apply_chat_template(msgs, **template_kw)
+        enc = self.tok([text], return_tensors="pt", truncation=True,
+                       max_length=self.max_input_length).to(self.model.device)
         with torch.no_grad():
             out = self.model.generate(**enc, max_new_tokens=self.max_new_tokens,
                                       do_sample=False, temperature=None, top_p=None)
         return self.tok.decode(out[0][enc.input_ids.shape[1]:], skip_special_tokens=True)
+
+
+VALID_TOKEN_TYPES = {
+    "english", "chinese_script", "chinese_translit", "other_foreign",
+    "loanword_naturalized", "proper_noun",
+}
+
+
+def _validate_result(obj, sid, sentence):
+    """Chuẩn hoá kết quả và loại token LLM bịa không xuất hiện trong câu."""
+    if not isinstance(obj, dict):
+        raise ValueError("mỗi kết quả phải là object JSON")
+    tokens = []
+    source = unicodedata.normalize("NFC", str(sentence)).casefold()
+    for tok in obj.get("tokens") or []:
+        if not isinstance(tok, dict):
+            continue
+        text = unicodedata.normalize("NFC", str(tok.get("text", "")).strip())
+        typ = str(tok.get("type", "")).strip()
+        if text and typ in VALID_TOKEN_TYPES and text.casefold() in source:
+            tokens.append({"text": text, "type": typ,
+                           "gloss": str(tok.get("gloss", "")).strip()})
+    strict = any(t["type"] in CS_TYPES_STRICT for t in tokens)
+    try:
+        confidence = min(1.0, max(0.0, float(obj.get("confidence", 0.0))))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    langs = obj.get("langs") or []
+    if not isinstance(langs, list):
+        langs = []
+    return {"id": str(sid), "has_cs": strict,
+            "langs": [str(x) for x in langs], "tokens": tokens,
+            "confidence": confidence}
 
 
 def make_backend(backend="gemini", **kw):
@@ -834,9 +876,12 @@ def annotate(df, backend="gemini", cache="cs_llm_cache.jsonl", splits=("val", "t
     n_ok = n_fail = 0
     t0 = time.time()
 
+    # Batch lỗi được chẻ đôi đến từng câu để không mất nguyên cụm dữ liệu.
+    queue = [todo[i:i + batch_size] for i in range(0, len(todo), batch_size)]
     with cache.open("a", encoding="utf-8") as f:
-        for bi in range(0, len(todo), batch_size):
-            batch = todo[bi:bi + batch_size]
+        batch_no = 0
+        while queue:
+            batch = queue.pop(0)
             prompt = build_user_prompt(batch)
             parsed = None
             for attempt in range(max_retry):
@@ -849,36 +894,42 @@ def annotate(df, backend="gemini", cache="cs_llm_cache.jsonl", splits=("val", "t
                     break
                 except Exception as e:
                     if attempt == max_retry - 1:
-                        print(f"    [fail] batch {bi//batch_size}: {type(e).__name__}: {str(e)[:90]}")
+                        if len(batch) > 1:
+                            mid = len(batch) // 2
+                            queue[0:0] = [batch[:mid], batch[mid:]]
+                            print(f"    [split] batch {len(batch)} -> {mid}+{len(batch)-mid}: "
+                                  f"{type(e).__name__}: {str(e)[:70]}")
+                        else:
+                            print(f"    [fail] id={batch[0][0]}: {type(e).__name__}: {str(e)[:90]}")
                         parsed = None
                     else:
                         time.sleep(2 ** attempt)
 
             if parsed is None:
-                n_fail += len(batch)
+                if len(batch) == 1:
+                    n_fail += 1
                 continue
 
             by_id = {str(o.get("id")): o for o in parsed}
-            for sid, stext in batch:
+            for pos, (sid, stext) in enumerate(batch):
                 o = by_id.get(sid)
                 if o is None:                      # LLM đổi id -> khớp theo thứ tự
-                    idx = [i for i, (s, _) in enumerate(batch) if s == sid]
-                    o = parsed[idx[0]] if idx and idx[0] < len(parsed) else {}
+                    o = parsed[pos] if pos < len(parsed) else {}
+                o = _validate_result(o, sid, stext)
                 rec = {"id": sid, "text": stext, "_tag": tag,
-                       "has_cs": bool(o.get("has_cs", False)),
-                       "langs": o.get("langs", []),
-                       "tokens": o.get("tokens", []),
-                       "confidence": float(o.get("confidence", 0.0) or 0.0)}
+                       "has_cs": o["has_cs"], "langs": o["langs"],
+                       "tokens": o["tokens"], "confidence": o["confidence"]}
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 n_ok += 1
             f.flush()
 
-            if (bi // batch_size) % 10 == 0:
+            if batch_no % 10 == 0:
                 el = time.time() - t0
                 print(f"    {n_ok}/{len(todo)} câu | {el:.0f}s "
                       f"| còn ~{el/max(n_ok,1)*(len(todo)-n_ok):.0f}s")
             if sleep:
                 time.sleep(sleep)
+            batch_no += 1
 
     print(f"[xong] {n_ok} câu OK, {n_fail} lỗi -> {cache}")
     return cache
