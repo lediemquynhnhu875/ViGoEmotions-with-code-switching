@@ -46,6 +46,33 @@ Kết quả chính nằm ở `cm_qwen3/annotations/annotations.csv`. Cache JSONL
 ghi sau mỗi batch, nên chạy lại cùng lệnh sẽ tiếp tục phần còn thiếu. Nếu GPU
 không đủ bộ nhớ, dùng `--model Qwen/Qwen3-4B`.
 
+### Chạy song song hai tài khoản Kaggle
+
+Hai tài khoản phải dùng cùng dataset và model. Đặt `--shard-index` lần lượt
+là `0` và `1`:
+
+```bash
+# tài khoản A
+python run_llm_detection.py --data-path /kaggle/input/vigoemotions \
+  --out-dir /kaggle/working/cm_qwen3 --num-shards 2 --shard-index 0
+
+# tài khoản B
+python run_llm_detection.py --data-path /kaggle/input/vigoemotions \
+  --out-dir /kaggle/working/cm_qwen3 --num-shards 2 --shard-index 1
+```
+
+Sau khi đưa hai cache về cùng một notebook, gộp và xuất kết quả:
+
+```bash
+python run_llm_detection.py --data-path /kaggle/input/vigoemotions \
+  --out-dir /kaggle/working/cm_qwen3 \
+  --merge-caches /kaggle/input/cache-a/llm_cache.jsonl \
+                 /kaggle/input/cache-b/llm_cache.jsonl
+```
+
+Lệnh merge kiểm tra đủ ID trước khi xuất. Cache cũ có thể được sao chép vào
+cả hai tài khoản; mỗi shard sẽ tự bỏ qua các ID đã hoàn thành.
+
 ```bash
 # 1. Trích xuất subset (từ Hugging Face — cần huggingface-cli login vì dataset gated)
 python extract_cs_subset.py --source hf --hf-name uitnlp/vigoemotions --out-dir ./cs_subsets
