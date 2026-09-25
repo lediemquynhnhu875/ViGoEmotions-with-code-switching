@@ -3,10 +3,14 @@ vigo_preprocess.py
 ==================
 Tiền xử lý ViGoEmotions theo đúng ba scenario của bài báo.
 
-  S1 — giữ nguyên emoji, chuẩn hoá teencode bằng từ điển thủ công
-  S2 — chuyển emoji/emoticon thành mô tả tiếng Việt + cùng chuẩn hoá teencode
-  S3 — giữ nguyên emoji, chuẩn hoá bằng ViSoLex (nếu không chạy được thì
-       dùng lại từ điển thủ công và ghi rõ trong báo cáo)
+  S1 — chuẩn hoá pattern/teencode bằng từ điển thủ công, giữ emoji
+  S2 — cùng pipeline S1 nhưng chuyển emoji/emoticon thành mô tả tiếng Việt
+  S3 — chuẩn hoá từ vựng mạng xã hội bằng ViSoLex; fallback từ điển thủ công
+       chỉ để pipeline tiếp tục chạy và không được báo cáo như S3 chuẩn
+
+Các scenario là ba cách tạo đầu vào cho classifier, không phải ba định nghĩa
+code-switching. Detector phải chạy trên text_raw để không làm mất token ngoại
+ngữ do quá trình chuẩn hoá.
 
 Ba từ điển dưới đây được trích nguyên văn từ output notebook
 `model/ViSoBERT.ipynb` trong repo, nên khớp với dữ liệu đã dùng để train.

@@ -283,6 +283,22 @@ _EN_KEEP = {
     "perfect", "crush", "flex", "vibe", "mood", "trend", "toxic", "fake",
     "real", "best", "worst", "happy", "sad", "angry", "boring", "cute",
 }
+
+# Slang/teencode tiếng Việt: tuyệt đối không phải từ ngoại ngữ.
+_VI_SOCIAL = {
+    "vl", "vcl", "vc", "đm", "dm", "dmm", "đmm", "cl", "clm", "cmm",
+    "cmn", "ko", "k", "j", "z", "dc", "đc", "mik", "bth", "vs", "cx",
+    "mn", "ny", "cmt", "ntn", "nt", "ib", "rep",
+}
+
+# Phiên âm ngoại ngữ phổ biến được giữ dù từng âm tiết giống tiếng Việt.
+# So khớp ở dạng bỏ dấu; mở rộng sau khi review dữ liệu.
+_KNOWN_TRANSLIT = {
+    "xia xia", "xie xie", "xi xie", "nie hao", "ni hao", "pa pa", "ma ma",
+    "chia du", "cha du", "jia you", "wo ai ni", "ai ya",
+    "thanh kiu", "then kiu", "ten kiu", "thank kiu", "gut bai", "so ri",
+    "ai lop diu", "ai love diu", "an nhon", "sa rang he", "ka wa i",
+}
 # Âm tiết/từ tiếng Việt thường gặp, gồm nhiều từ Hán-Việt đã là từ tiếng Việt.
 # Dùng để bác các token LLM gán nhầm. So khớp cả dạng có dấu lẫn bỏ dấu.
 VI_COMMON = set("""
@@ -304,7 +320,7 @@ sức khỏe bệnh tật cuộc sống cuộc đời số phận
 thi tan con ban cam tin sang hang long man mai bay tay hai chan chin
 de vi co la ma may toi khong duoc nguoi nhieu it moi cu lai
 viet nam ha noi sai gon hue da nang can tho hai phong
-tot xau dep hay dở nhanh cham lon nho cao thap dai ngan
+tot xau dep hay dở nhanh cham lon nho cao thap dai ngan cố lên
 """.split())
 
 
@@ -372,6 +388,11 @@ def _check_token(tok, sentence=""):
     parts = [p for p in _re.split(r"[\s\-_/]+", text) if p]
 
     if typ == "english":
+        norm = " ".join(_strip_dia(p.lower()) for p in parts)
+        if norm in _KNOWN_TRANSLIT:
+            return "english_translit"
+        if text.lower() in _VI_SOCIAL or _strip_dia(text.lower()) in _VI_SOCIAL:
+            return None
         # (B) có dấu tiếng Việt -> không bao giờ là tiếng Anh
         if _VN_DIA.search(text):
             return "proper_noun" if text[:1].isupper() else None
@@ -384,6 +405,14 @@ def _check_token(tok, sentence=""):
             return None
         return "english"
 
+    if typ == "english_translit":
+        norm = " ".join(_strip_dia(p.lower()) for p in parts)
+        if norm in _KNOWN_TRANSLIT:
+            return "english_translit"
+        if all(_is_vietnamese_word(p) for p in parts):
+            return None
+        return "english_translit"
+
     if typ == "chinese_script":
         return "chinese_script" if _HAN.search(text) else None
 
@@ -393,6 +422,9 @@ def _check_token(tok, sentence=""):
         # (C) Hán-Việt: mọi thành phần đều là từ tiếng Việt thường gặp -> loại.
         # "tạ ơn", "quốc gia", "gia đình" là TIẾNG VIỆT, không phải tiếng Trung.
         low = [p.lower() for p in parts]
+        norm = " ".join(_strip_dia(p) for p in low)
+        if norm not in _KNOWN_TRANSLIT and all(_is_vietnamese_word(p) for p in low):
+            return None
         if all(p in VI_COMMON or _strip_dia(p) in VI_COMMON for p in low):
             return None
         if text.lower() in VI_COMMON or _strip_dia(text.lower()) in VI_COMMON:
@@ -436,7 +468,7 @@ def clean_cache(cache_in=None, cache_out=None, tag=None, verbose=True):
             o["tokens"] = new_toks
             o["has_cs"] = len(cs) > 0
             o["langs"] = sorted({"zh" if "chinese" in t["type"] else
-                                 "en" if t["type"] == "english" else "other"
+                                 "en" if t["type"] in ("english", "english_translit") else "other"
                                  for t in cs})
             f.write(json.dumps(o, ensure_ascii=False) + "\n")
             kept += 1

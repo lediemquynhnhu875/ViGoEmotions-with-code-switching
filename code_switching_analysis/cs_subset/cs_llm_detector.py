@@ -98,10 +98,14 @@ PHÂN LOẠI TOKEN (bắt buộc dùng đúng các nhãn này):
 1. "english" — từ/cụm tiếng Anh viết đúng chính tả gốc.
    Ví dụ: feel good, check in, deadline, oversize, handsome
 
-2. "chinese_script" — viết bằng chữ Hán.
+2. "english_translit" — tiếng Anh được phiên âm theo cách đọc của người Việt.
+   Ví dụ: "thanh kìu" / "then kiu" = thank you, "gút bai" = goodbye,
+          "sô rì" = sorry, "ai lớp diu" = I love you.
+
+3. "chinese_script" — viết bằng chữ Hán.
    Ví dụ: 谢谢, 加油, 好
 
-3. "chinese_translit" — tiếng Trung PHIÊN ÂM sang chữ Việt. ĐÂY LÀ LOẠI QUAN TRỌNG NHẤT.
+4. "chinese_translit" — tiếng Trung PHIÊN ÂM sang chữ Việt. ĐÂY LÀ LOẠI QUAN TRỌNG NHẤT.
    Ví dụ: "xia xìa" hoặc "xiê xiê" = 谢谢 (cảm ơn)
           "chia du" / "cha du" = 加油 (cố lên)
           "pà pà" = 爸爸 (bố), "ma ma" = 妈妈 (mẹ)
@@ -109,23 +113,27 @@ PHÂN LOẠI TOKEN (bắt buộc dùng đúng các nhãn này):
           "ai ya" = 哎呀
    Dấu hiệu: chuỗi âm tiết không có nghĩa tiếng Việt thông thường trong ngữ cảnh, nhưng khớp âm tiếng Trung phổ thông.
 
-4. "other_foreign" — ngôn ngữ khác (Hàn, Nhật, Pháp...) kể cả dạng phiên âm.
+5. "other_foreign" — ngôn ngữ khác (Hàn, Nhật, Pháp...) kể cả dạng phiên âm.
    Ví dụ: "an nhon" = 안녕, "sa rang hê" = 사랑해, "ka wa i" = かわいい
 
-5. "loanword_naturalized" — từ gốc ngoại đã Việt hoá hoàn toàn, người Việt dùng như từ Việt.
+6. "loanword_naturalized" — từ gốc ngoại đã Việt hoá hoàn toàn, người Việt dùng như từ Việt.
    Ví dụ: ship, like, share, video, internet, ok, cà phê, xe buýt, ga, sếp
    (Vẫn liệt kê ra, nhưng đánh dấu riêng để phía sau quyết định có tính hay không.)
 
-6. "proper_noun" — tên riêng người, địa danh, thương hiệu.
+7. "proper_noun" — tên riêng người, địa danh, thương hiệu.
    Ví dụ: Facebook, TikTok, Messi, Dima Egiazarov, Shopee
    (Liệt kê nhưng KHÔNG tính là chuyển mã.)
 
 KHÔNG PHẢI CHUYỂN MÃ — tuyệt đối không liệt kê:
-- Teencode / viết tắt tiếng Việt: ko, k, j, z, dc, mik, bth, vs, cx, mn, ny, cmt
+- Teencode / viết tắt / slang tiếng Việt: ko, k, j, z, dc, mik, bth, vs,
+  cx, mn, ny, cmt, vl, vcl, vc, đm, dm, dmm, clm, cmm
 - Tiếng cười, thán từ: haha, kkk, hihi, huhu, hehe
 - Emoji, ký hiệu, dấu câu
 - Tiếng Việt viết sai chính tả hoặc thiếu dấu: "khong", "duoc", "thich"
 - Từ tiếng Việt thuần dù nghe lạ
+- Bản dịch tiếng Việt của ngoại ngữ: "cố lên" vẫn là tiếng Việt, KHÔNG phải
+  chinese_translit vì dịch sang tiếng Trung là 加油; "cảm ơn" vẫn là tiếng
+  Việt, KHÔNG phải English/Chinese vì tương đương thank you/谢谢.
 
 BA LỖI NGHIÊM TRỌNG PHẢI TRÁNH:
 
@@ -158,8 +166,12 @@ BA LỖI NGHIÊM TRỌNG PHẢI TRÁNH:
 
 QUY TẮC:
 - Chỉ liệt kê token thực sự xuất hiện trong câu, giữ nguyên dạng gốc.
+- Chỉ xét HÌNH THỨC BỀ MẶT trong câu. Không dịch từ/cụm tiếng Việt sang ngoại
+  ngữ rồi dùng bản dịch đó làm bằng chứng code-switching.
 - Token "english" phải viết bằng chữ Latin KHÔNG DẤU. Từ có dấu tiếng Việt
   (á à ả ã ạ ă â ê ô ơ ư đ...) KHÔNG BAO GIỜ là tiếng Anh.
+- Token có dấu chỉ có thể là phiên âm khi toàn cụm là cách ghi âm ngoại ngữ
+  và không tạo thành một cụm tiếng Việt có nghĩa.
 - Khi phân vân, luôn nghiêng về TIẾNG VIỆT và hạ confidence. Thà bỏ sót còn
   hơn gán nhầm.
 - confidence là số thực 0.0–1.0 cho toàn câu.
@@ -168,11 +180,12 @@ QUY TẮC:
 
 [
   {"id": <id câu>, "has_cs": true/false, "langs": ["en"|"zh"|"ko"|"ja"|"other"],
-   "tokens": [{"text": "...", "type": "english|chinese_script|chinese_translit|other_foreign|loanword_naturalized|proper_noun", "gloss": "nghĩa tiếng Việt"}],
+   "tokens": [{"text": "...", "type": "english|english_translit|chinese_script|chinese_translit|other_foreign|loanword_naturalized|proper_noun", "gloss": "nghĩa tiếng Việt"}],
    "confidence": 0.0-1.0}
 ]
 
-has_cs = true khi có ít nhất một token thuộc english, chinese_script, chinese_translit, hoặc other_foreign.
+has_cs = true khi có ít nhất một token thuộc english, english_translit,
+chinese_script, chinese_translit, hoặc other_foreign.
 loanword_naturalized và proper_noun KHÔNG làm has_cs thành true."""
 
 FEWSHOT = [
@@ -185,6 +198,11 @@ FEWSHOT = [
      {"has_cs": True, "langs": ["zh"],
       "tokens": [{"text": "xia xìa", "type": "chinese_translit", "gloss": "谢谢 - cảm ơn"}],
       "confidence": 0.9}),
+    ("thanh kìu bạn nhiều nha",
+     {"has_cs": True, "langs": ["en"],
+      "tokens": [{"text": "thanh kìu", "type": "english_translit",
+                  "gloss": "thank you - cảm ơn"}],
+      "confidence": 0.95}),
     ("加油 nha em, sắp thi rồi",
      {"has_cs": True, "langs": ["zh"],
       "tokens": [{"text": "加油", "type": "chinese_script", "gloss": "cố lên"}],
@@ -197,6 +215,8 @@ FEWSHOT = [
       "confidence": 0.9}),
     ("bức ảnh xuất sắc ❤️ haha",
      {"has_cs": False, "langs": [], "tokens": [], "confidence": 0.98}),
+    ("vl cố lên bạn ơi, sắp được rồi",
+     {"has_cs": False, "langs": [], "tokens": [], "confidence": 0.99}),
     # --- ba ví dụ chống lỗi hay gặp ---
     ("Tạ ơn vì có cái cớ, bằng chứng để ly dị cái loại rác rưởi nầy.",
      {"has_cs": False, "langs": [], "tokens": [], "confidence": 0.95}),
@@ -764,7 +784,8 @@ class LocalBackend:
 
 
 VALID_TOKEN_TYPES = {
-    "english", "chinese_script", "chinese_translit", "other_foreign",
+    "english", "english_translit", "chinese_script", "chinese_translit",
+    "other_foreign",
     "loanword_naturalized", "proper_noun",
 }
 
@@ -938,7 +959,8 @@ def annotate(df, backend="gemini", cache="cs_llm_cache.jsonl", splits=("val", "t
 # ---------------------------------------------------------------------------
 # 5. Ghép kết quả LLM vào DataFrame theo lược đồ cũ
 # ---------------------------------------------------------------------------
-CS_TYPES_STRICT = {"english", "chinese_script", "chinese_translit", "other_foreign"}
+CS_TYPES_STRICT = {"english", "english_translit", "chinese_script",
+                   "chinese_translit", "other_foreign"}
 
 
 CACHE_COLS = ["id", "text", "_tag", "has_cs", "langs", "tokens", "confidence"]
@@ -995,14 +1017,18 @@ def build_subsets(df, cache="cs_llm_cache.jsonl", tag=None, id_col="id",
             "llm_has_cs": has,
             "llm_confidence": conf,
             "llm_langs": ",".join(row.get("langs") or []),
-            "n_english": len(by.get("english", [])),
+            "n_english": (len(by.get("english", [])) +
+                          len(by.get("english_translit", []))),
             "n_chinese": len(by.get("chinese_script", [])) + len(by.get("chinese_translit", [])),
-            "n_translit": len(by.get("chinese_translit", [])) + len(by.get("other_foreign", [])),
+            "n_translit": (len(by.get("english_translit", [])) +
+                           len(by.get("chinese_translit", [])) +
+                           len(by.get("other_foreign", []))),
             "n_loanword": len(by.get("loanword_naturalized", [])),
             "n_proper_noun": len(by.get("proper_noun", [])),
             "n_cs_tokens": len(cs_tokens),
             "cs_tokens": " | ".join(cs_tokens[:20]),
-            "english_tokens": " ".join(by.get("english", [])[:20]),
+            "english_tokens": " ".join((by.get("english", []) +
+                                          by.get("english_translit", []))[:20]),
             "chinese_tokens": " ".join((by.get("chinese_script", []) +
                                         by.get("chinese_translit", []))[:20]),
         })

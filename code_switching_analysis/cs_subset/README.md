@@ -5,6 +5,29 @@ Bộ script trích xuất subset code-switching cho pipeline:
 - **Giai đoạn 1**: ViGoEmotions → detect CS subset → re-evaluate baseline → XLM-R + xLSTM → so sánh macro/micro F1.
 - **Giai đoạn 2**: ViCM → pretrain/adapt → transfer sang ViGoEmotions → so sánh có/không ViCM adaptation.
 
+## Định nghĩa ba scenario tiền xử lý
+
+Ba scenario tạo ba phiên bản **đầu vào cho mô hình phân loại cảm xúc** từ cùng
+một câu gốc. Chúng không phải ba cách định nghĩa code-switching.
+
+| Scenario | Các bước chính | Xử lý emoji | Mục đích |
+|---|---|---|---|
+| **S1 — chuẩn hóa văn bản, giữ emoji** | Lowercase; chuẩn hóa HTML/pattern và dấu câu; rút gọn ký tự, emoji lặp; thay teencode bằng tiếng Việt chuẩn | Giữ emoji/emoticon dưới dạng ký hiệu | Bảo toàn tín hiệu cảm xúc trực tiếp từ emoji để tokenizer/model tự học |
+| **S2 — chuẩn hóa văn bản, diễn giải emoji** | Thực hiện toàn bộ bước của S1, sau đó thay emoji/emoticon bằng mô tả tiếng Việt | Ví dụ `😂` → `cười ra nước mắt`, `❤️` → `yêu` | Biến tín hiệu hình ảnh thành token chữ, hữu ích với model xử lý emoji kém |
+| **S3 — chuẩn hóa từ vựng bằng ViSoLex** | Dùng ViSoLex để chuẩn hóa từ phi chuẩn, teencode và biến thể mạng xã hội theo ngữ cảnh; sau đó lowercase/làm sạch khoảng trắng | Theo output của ViSoLex, không dùng bảng thay emoji thủ công của S2 | Đánh giá lợi ích của mô hình lexical normalization thay cho từ điển thủ công |
+
+Các bước chung của S1/S2 phải giống nhau; khác biệt thực nghiệm chính là
+**giữ emoji** ở S1 và **chuyển emoji thành chữ** ở S2. S3 chỉ hợp lệ khi dùng
+output ViSoLex thật (ví dụ `s3_visolex_train-val-test.pkl`) hoặc chạy trực tiếp
+model `uitnlp/visolex`. Nếu không nạp được ViSoLex và chỉ lowercase/áp dụng từ
+điển thủ công thì đó là **fallback**, không được báo cáo như S3 chuẩn.
+
+Việc phát hiện code-switching luôn chạy trên `text_raw`. Nếu dò trên `text_s1`,
+`text_s2` hoặc `text_s3`, bước chuẩn hóa có thể dịch/thay thế token ngoại ngữ
+(`thanks` → `cảm ơn`) và làm sai thành phần của code-switching subset. Sau khi
+xác định cùng một tập ID trên văn bản thô, checkpoint S1/S2/S3 lần lượt được
+đánh giá bằng `text_s1`/`text_s2`/`text_s3` của chính các ID đó.
+
 ## Files
 
 | File | Vai trò |
