@@ -96,6 +96,33 @@ python run_llm_detection.py --data-path /kaggle/input/vigoemotions \
 Lệnh merge kiểm tra đủ ID trước khi xuất. Cache cũ có thể được sao chép vào
 cả hai tài khoản; mỗi shard sẽ tự bỏ qua các ID đã hoàn thành.
 
+### So sánh Qwen3-8B với Aya Expanse 8B
+
+Aya là model đối chứng khác họ Qwen, tối ưu cho 23 ngôn ngữ gồm Việt, Anh và
+Trung. Chạy cùng dữ liệu bằng cách đổi duy nhất `--model`; cache sẽ có tag riêng:
+
+```bash
+python run_llm_detection.py --data-path /kaggle/input/vigoemotions \
+  --out-dir /kaggle/working/cm_aya \
+  --model CohereLabs/aya-expanse-8b --batch-size 8
+```
+
+Sau khi hậu kiểm hai cache bằng cùng bộ luật, tạo bảng bất đồng và mẫu chấm tay:
+
+```bash
+python compare_llm_caches.py \
+  --cache-a /kaggle/input/qwen-cache/llm_cache_clean.jsonl \
+  --tag-a local:Qwen3-8B --name-a qwen \
+  --cache-b /kaggle/input/aya-cache/llm_cache_clean.jsonl \
+  --tag-b local:aya-expanse-8b --name-b aya \
+  --out-dir /kaggle/working/qwen_vs_aya --review-n 300
+```
+
+Điền `gold_has_cs` trong `review_sample.csv`, rồi chạy lại với
+`--score-review <đường-dẫn-review.csv>`. Chọn model theo F1/precision/recall
+trên gold review, không chọn theo số câu model tự gán code-switching. Aya
+Expanse dùng giấy phép CC-BY-NC và phù hợp cho mục đích nghiên cứu phi thương mại.
+
 ```bash
 # 1. Trích xuất subset (từ Hugging Face — cần huggingface-cli login vì dataset gated)
 python extract_cs_subset.py --source hf --hf-name uitnlp/vigoemotions --out-dir ./cs_subsets

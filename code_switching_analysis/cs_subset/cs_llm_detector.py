@@ -754,6 +754,8 @@ class LocalBackend:
             print("[i] nạp ở chế độ 4-bit")
 
         self.tok = AutoTokenizer.from_pretrained(model)
+        if self.tok.pad_token_id is None:
+            self.tok.pad_token = self.tok.eos_token
         try:                                   # transformers mới
             self.model = AutoModelForCausalLM.from_pretrained(model, dtype=dtype, **kw)
         except TypeError:                      # transformers cũ
@@ -766,15 +768,22 @@ class LocalBackend:
 
     def __call__(self, user_prompt):
         import torch
-        # Tắt reasoning dài của Qwen3 để sinh JSON nhanh và ổn định hơn.
+        is_qwen3 = "qwen3" in self.model_name.lower()
+        user_content = user_prompt + ("\n/no_think" if is_qwen3 else "")
         msgs = [{"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt + "\n/no_think"}]
+                {"role": "user", "content": user_content}]
         template_kw = dict(tokenize=False, add_generation_prompt=True)
         try:
-            text = self.tok.apply_chat_template(msgs, enable_thinking=False,
-                                                **template_kw)
-        except TypeError:                    # Qwen2.5 / transformers cũ
-            text = self.tok.apply_chat_template(msgs, **template_kw)
+            if is_qwen3:
+                text = self.tok.apply_chat_template(
+                    msgs, enable_thinking=False, **template_kw)
+            else:
+                text = self.tok.apply_chat_template(msgs, **template_kw)
+        except (TypeError, ValueError):
+            # Một số template (Aya/Cohere) không nhận system role.
+            merged = [{"role": "user",
+                       "content": SYSTEM_PROMPT + "\n\n" + user_content}]
+            text = self.tok.apply_chat_template(merged, **template_kw)
         enc = self.tok([text], return_tensors="pt", truncation=True,
                        max_length=self.max_input_length).to(self.model.device)
         with torch.no_grad():

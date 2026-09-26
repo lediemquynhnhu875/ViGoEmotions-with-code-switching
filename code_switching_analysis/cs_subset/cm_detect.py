@@ -55,6 +55,9 @@ PRESETS = {
     "local_qwen3_4b": dict(
         backend="local", model="Qwen/Qwen3-4B", batch_size=10,
         _note="Nhẹ hơn cho GPU ít VRAM; nên kiểm tra tay kỹ hơn bản 8B."),
+    "local_aya_8b": dict(
+        backend="local", model="CohereLabs/aya-expanse-8b", batch_size=8,
+        _note="Đối chứng khuyến nghị: 8B, tối ưu Việt-Anh-Trung, CC-BY-NC."),
     "local_7b": dict(
         backend="local", model="Qwen/Qwen2.5-7B-Instruct", batch_size=8,
         _note="Miễn phí, tái lập được. Cần GPU + bitsandbytes. ~2–3 giờ."),
