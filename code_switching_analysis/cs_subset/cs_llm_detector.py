@@ -715,7 +715,8 @@ class LocalBackend:
                "Qwen/Qwen2.5-14B-Instruct": "Qwen/Qwen2.5-7B-Instruct"}
 
     def __init__(self, model="Qwen/Qwen3-8B", max_new_tokens=2048,
-                 load_in_4bit=True, dtype=None, max_input_length=8192):
+                 load_in_4bit=True, dtype=None, max_input_length=8192,
+                 hf_token=None):
         import importlib.util
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -746,6 +747,8 @@ class LocalBackend:
                 model = alt
 
         kw = {"device_map": "auto"}
+        if hf_token:
+            kw["token"] = hf_token
         if load_in_4bit:
             from transformers import BitsAndBytesConfig
             kw["quantization_config"] = BitsAndBytesConfig(
@@ -753,7 +756,8 @@ class LocalBackend:
                 bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
             print("[i] nạp ở chế độ 4-bit")
 
-        self.tok = AutoTokenizer.from_pretrained(model)
+        tok_kw = {"token": hf_token} if hf_token else {}
+        self.tok = AutoTokenizer.from_pretrained(model, **tok_kw)
         if self.tok.pad_token_id is None:
             self.tok.pad_token = self.tok.eos_token
         try:                                   # transformers mới
