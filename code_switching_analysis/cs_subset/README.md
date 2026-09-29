@@ -96,32 +96,44 @@ python run_llm_detection.py --data-path /kaggle/input/vigoemotions \
 Lệnh merge kiểm tra đủ ID trước khi xuất. Cache cũ có thể được sao chép vào
 cả hai tài khoản; mỗi shard sẽ tự bỏ qua các ID đã hoàn thành.
 
-### So sánh Qwen3-8B với SeaLLM-7B-v2.5
+### So sánh Qwen3-8B với Aya Expanse 8B
 
-SeaLLM là model public 7B tập trung vào tiếng Việt, tiếng Trung và các ngôn ngữ
-Đông Nam Á. Chạy cùng dữ liệu bằng cách đổi `--model`; cache sẽ có tag riêng:
-
-```bash
-python run_llm_detection.py --data-path /kaggle/input/vigoemotions \
-  --out-dir /kaggle/working/cm_seallm \
-  --model SeaLLMs/SeaLLM-7B-v2.5 --batch-size 8
-```
-
-Sau khi hậu kiểm hai cache bằng cùng bộ luật, tạo bảng bất đồng và mẫu chấm tay:
+Chỉ so sánh khi hai model đã chạy trên **cùng tập ID**. File cache có thể mang
+đuôi `.txt` miễn mỗi dòng là một JSON object hợp lệ (JSONL). Kiểm tra tag thật
+trong cache nếu lệnh báo không tìm thấy tag.
 
 ```bash
 python compare_llm_caches.py \
-  --cache-a /kaggle/input/qwen-cache/llm_cache_clean.jsonl \
+  --cache-a /kaggle/input/qwen-cache/llm_cache.txt \
   --tag-a local:Qwen3-8B --name-a qwen \
-  --cache-b /kaggle/input/seallm-cache/llm_cache_clean.jsonl \
-  --tag-b local:SeaLLM-7B-v2.5 --name-b seallm \
-  --out-dir /kaggle/working/qwen_vs_seallm --review-n 300
+  --cache-b /kaggle/input/aya-cache/llm_cache.txt \
+  --tag-b local:aya-expanse-8b --name-b aya \
+  --out-dir /kaggle/working/qwen_vs_aya \
+  --review-n 500 --disagreement-n 500
 ```
 
-Điền `gold_has_cs` trong `review_sample.csv`, rồi chạy lại với
-`--score-review <đường-dẫn-review.csv>`. Chọn model theo F1/precision/recall
-trên gold review, không chọn theo số câu model tự gán code-switching. Aya vẫn
-có preset `local_aya_8b`, nhưng cần chấp nhận quyền truy cập và truyền `hf_token`.
+Output gồm `summary.json`, `paired_predictions.csv`, `all_disagreements.csv`,
+`evaluation_sample.csv` và `disagreement_review.csv`. Điền `gold_has_cs` bằng
+`0/1` trong **evaluation_sample.csv** mà không xem dự đoán nếu có thể; đây là
+mẫu ngẫu nhiên dùng để tính điểm. `disagreement_review.csv` dùng riêng để phân
+tích lỗi, không dùng làm điểm tổng vì đã cố ý lấy quá nhiều ca bất đồng.
+
+Sau khi chấm xong, upload file lên Kaggle rồi chạy lại:
+
+```bash
+python compare_llm_caches.py \
+  --cache-a /kaggle/input/qwen-cache/llm_cache.txt \
+  --tag-a local:Qwen3-8B --name-a qwen \
+  --cache-b /kaggle/input/aya-cache/llm_cache.txt \
+  --tag-b local:aya-expanse-8b --name-b aya \
+  --out-dir /kaggle/working/qwen_vs_aya \
+  --score-review /kaggle/input/manual-review/evaluation_sample.csv
+```
+
+`gold_scores.json` chứa confusion matrix, precision, recall, F1, accuracy,
+false-positive rate và bootstrap 95% CI cho chênh lệch F1. Với yêu cầu hiện
+tại, ưu tiên **precision** và false-positive rate trước, sau đó mới xét F1 và
+recall, vì lỗi chính cần tránh là slang/từ tiếng Việt bị nhận nhầm là ngoại ngữ.
 
 ```bash
 # 1. Trích xuất subset (từ Hugging Face — cần huggingface-cli login vì dataset gated)
