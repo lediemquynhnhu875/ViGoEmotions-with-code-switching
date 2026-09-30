@@ -96,7 +96,11 @@ NHIỆM VỤ: với mỗi câu, xác định có chất liệu ngôn ngữ NGO�
 PHÂN LOẠI TOKEN (bắt buộc dùng đúng các nhãn này):
 
 1. "english" — từ/cụm tiếng Anh viết đúng chính tả gốc.
-   Ví dụ: feel good, check in, deadline, oversize, handsome
+   Ví dụ: feel good, check in, deadline, oversize, handsome, thanks, toxic,
+   overthinking, tip, skincare, pls, crush, clone, vlog, free, post, group,
+   like, share, boss.
+   Từ tiếng Anh viết tắt hoặc sai nhẹ nhưng vẫn nhận ra rõ ("pls" = please,
+   "ovethingking" = overthinking) vẫn là english và được tính chuyển mã.
 
 2. "english_translit" — tiếng Anh được phiên âm theo cách đọc của người Việt.
    Ví dụ: "thanh kìu" / "then kiu" = thank you, "gút bai" = goodbye,
@@ -117,8 +121,12 @@ PHÂN LOẠI TOKEN (bắt buộc dùng đúng các nhãn này):
    Ví dụ: "an nhon" = 안녕, "sa rang hê" = 사랑해, "ka wa i" = かわいい
 
 6. "loanword_naturalized" — từ gốc ngoại đã Việt hoá hoàn toàn, người Việt dùng như từ Việt.
-   Ví dụ: ship, like, share, video, internet, ok, cà phê, xe buýt, ga, sếp
+   Trong quy ước của nghiên cứu này, dùng danh sách đóng: ok/okay/oke,
+   cafe/café/cà phê, video, shipper, internet, xe buýt, ga, sếp.
    (Vẫn liệt kê ra, nhưng đánh dấu riêng để phía sau quyết định có tính hay không.)
+   KHÔNG được tự mở rộng nhóm này. Đặc biệt like, share, boss, thanks, toxic,
+   overthinking, tip, skincare, pls, crush, clone, vlog, free, post và group
+   luôn là english, không phải loanword_naturalized.
 
 7. "proper_noun" — tên riêng người, địa danh, thương hiệu.
    Ví dụ: Facebook, TikTok, Messi, Dima Egiazarov, Shopee
@@ -166,6 +174,9 @@ BA LỖI NGHIÊM TRỌNG PHẢI TRÁNH:
 
 QUY TẮC:
 - Chỉ liệt kê token thực sự xuất hiện trong câu, giữ nguyên dạng gốc.
+- Quy ước bắt buộc: like, share và boss là english, làm has_cs thành true.
+- Quy ước bắt buộc: ok, cafe/cà phê, video và shipper là
+  loanword_naturalized, không tự làm has_cs thành true.
 - Chỉ xét HÌNH THỨC BỀ MẶT trong câu. Không dịch từ/cụm tiếng Việt sang ngoại
   ngữ rồi dùng bản dịch đó làm bằng chứng code-switching.
 - Token "english" phải viết bằng chữ Latin KHÔNG DẤU. Từ có dấu tiếng Việt
@@ -203,6 +214,20 @@ FEWSHOT = [
       "tokens": [{"text": "thanh kìu", "type": "english_translit",
                   "gloss": "thank you - cảm ơn"}],
       "confidence": 0.95}),
+    ("bạn gái bạn có vẻ hơi toxic, nhớ share post cho boss nhé",
+     {"has_cs": True, "langs": ["en"],
+      "tokens": [{"text": "toxic", "type": "english", "gloss": "độc hại"},
+                 {"text": "share", "type": "english", "gloss": "chia sẻ"},
+                 {"text": "post", "type": "english", "gloss": "bài đăng"},
+                 {"text": "boss", "type": "english", "gloss": "sếp"}],
+      "confidence": 0.98}),
+    ("shipper gửi video qua, xem ok thì ra cafe nhé",
+     {"has_cs": False, "langs": [],
+      "tokens": [{"text": "shipper", "type": "loanword_naturalized", "gloss": "người giao hàng"},
+                 {"text": "video", "type": "loanword_naturalized", "gloss": "đoạn phim"},
+                 {"text": "ok", "type": "loanword_naturalized", "gloss": "được"},
+                 {"text": "cafe", "type": "loanword_naturalized", "gloss": "cà phê"}],
+      "confidence": 0.98}),
     ("加油 nha em, sắp thi rồi",
      {"has_cs": True, "langs": ["zh"],
       "tokens": [{"text": "加油", "type": "chinese_script", "gloss": "cố lên"}],

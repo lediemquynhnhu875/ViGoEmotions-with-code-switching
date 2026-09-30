@@ -288,6 +288,16 @@ _EN_KEEP = {
     "please", "thanks", "thank", "love", "hate", "beautiful", "amazing",
     "perfect", "crush", "flex", "vibe", "mood", "trend", "toxic", "fake",
     "real", "best", "worst", "happy", "sad", "angry", "boring", "cute",
+    "overthinking", "ovethingking", "tip", "skincare", "pls", "clone",
+    "vlog", "free", "post", "group", "like", "share", "boss",
+}
+
+# Chính sách annotation của nghiên cứu: các mục này luôn là lexical insertion
+# tiếng Anh, kể cả khi LLM trả nhầm loanword_naturalized.
+_FORCE_ENGLISH = {
+    "thanks", "toxic", "overthinking", "ovethingking", "overthingking",
+    "tip", "skincare", "pls", "crush", "clone", "vlog", "free", "post",
+    "group", "like", "share", "boss",
 }
 
 # Slang/teencode tiếng Việt: tuyệt đối không phải từ ngoại ngữ.
@@ -392,6 +402,9 @@ def _check_token(tok, sentence=""):
     if not text:
         return None
     parts = [p for p in _re.split(r"[\s\-_/]+", text) if p]
+
+    if text.lower() in _FORCE_ENGLISH:
+        return "english"
 
     if typ == "english":
         norm = " ".join(_strip_dia(p.lower()) for p in parts)

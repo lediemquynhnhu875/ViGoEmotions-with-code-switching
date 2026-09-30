@@ -523,6 +523,7 @@ sport staff star start stop story strong super sure sweet tag talk target taste
 teen text thanks time tip tour track train trip trust try update upload user video
 vip voice vote wall war warm watch web weekend welcome win wish work world young
 deadline feedback outfit offline online comeback teamwork homework workshop
+boss skincare pls clone free overthinking ovethingking overthingking
 """.split())
 
 # Cụm tiếng Anh nhiều từ. Khớp trọn cụm mạnh hơn hẳn xét từng token rời.
@@ -544,8 +545,8 @@ EN_PHRASES = [
 EN_LOANWORD_NATURALIZED = set("""
 ok oke okay video internet email file laptop micro camera radio tivi
 ga sếp phanh xăng lốp bơm săm bánh mì cà phê xà phòng
-ship shipper like share comment inbox seen block acc nick web link app
-pin sim card bill tour tip menu shopping mall taxi bus
+ship shipper comment inbox seen block acc nick web link app
+pin sim card bill tour menu shopping mall taxi bus
 """.split())
 
 # Từ mượn đã Việt hoá thì không đồng thời là "bằng chứng tiếng Anh mạnh".
