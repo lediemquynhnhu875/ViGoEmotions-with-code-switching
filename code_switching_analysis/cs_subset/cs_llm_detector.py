@@ -293,6 +293,36 @@ def _extract_json(s: str):
     return json.loads(s)
 
 
+def _normalize_result_list(value):
+    """Chuẩn hóa các wrapper phổ biến thành list[dict], từ chối text tự do."""
+    if isinstance(value, dict):
+        for key in ("results", "data", "items", "output", "sentences"):
+            if key in value:
+                return _normalize_result_list(value[key])
+        return [value]
+
+    if isinstance(value, str):
+        try:
+            return _normalize_result_list(json.loads(value))
+        except json.JSONDecodeError as exc:
+            raise TypeError("phần tử kết quả là chuỗi, không phải JSON object") from exc
+
+    if not isinstance(value, list):
+        raise TypeError(f"kết quả phải là list/dict, nhận {type(value).__name__}")
+
+    output = []
+    for index, item in enumerate(value):
+        try:
+            normalized = _normalize_result_list(item)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(f"phần tử {index} không phải JSON object: {exc}") from exc
+        output.extend(normalized)
+
+    if not all(isinstance(item, dict) for item in output):
+        raise TypeError("kết quả chứa phần tử không phải JSON object")
+    return output
+
+
 def list_gemini_models(api_key=None, only_generate=True):
     """Liệt kê model mà API key của bạn thực sự dùng được.
 
@@ -883,7 +913,7 @@ def test_backend(backend="openrouter", verbose=True, **kw):
         print("--- output thô ---")
         print(raw[:1200])
     try:
-        parsed = _extract_json(raw)
+        parsed = _normalize_result_list(_extract_json(raw))
         print(f"\n[OK] parse được {len(parsed)} phần tử")
         for o in parsed:
             print(f"  has_cs={o.get('has_cs')} langs={o.get('langs')} "
@@ -945,9 +975,7 @@ def annotate(df, backend="gemini", cache="cs_llm_cache.jsonl", splits=("val", "t
             parsed = None
             for attempt in range(max_retry):
                 try:
-                    parsed = _extract_json(bk(prompt))
-                    if isinstance(parsed, dict):
-                        parsed = parsed.get("results") or parsed.get("data") or [parsed]
+                    parsed = _normalize_result_list(_extract_json(bk(prompt)))
                     if len(parsed) != len(batch):
                         raise ValueError(f"trả về {len(parsed)} phần tử, cần {len(batch)}")
                     break
